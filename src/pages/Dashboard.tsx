@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAuth } from "@/hooks/useAuth";
 import {
   Shield, Users, FileText, AlertTriangle, TrendingUp,
   BarChart3, Activity, LogOut, Bell, Search, Pencil, Plus, Trash2, Save, X
@@ -141,6 +142,7 @@ const EditableStatCard = ({ stat, onSave }: { stat: StatItem; onSave: (s: StatIt
 // ── Main Dashboard ──
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { signOut } = useAuth();
   const [stats, setStats] = useState<StatItem[]>(initialStats);
   const [events, setEvents] = useState<EventItem[]>(initialEvents);
   const [personnel, setPersonnel] = useState<PersonnelItem[]>(initialPersonnel);
@@ -209,7 +211,7 @@ const Dashboard = () => {
               <Bell className="h-5 w-5" />
               <span className="absolute -top-1 -right-1 h-4 w-4 bg-destructive text-destructive-foreground rounded-full text-[10px] flex items-center justify-center">3</span>
             </Button>
-            <Button variant="outline" size="sm" onClick={() => navigate("/")} className="gap-2">
+            <Button variant="outline" size="sm" onClick={async () => { await signOut(); navigate("/"); }} className="gap-2">
               <LogOut className="h-4 w-4" /> Вийти
             </Button>
           </div>

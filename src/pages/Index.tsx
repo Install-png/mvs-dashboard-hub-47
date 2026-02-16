@@ -6,6 +6,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Shield, Lock, UserPlus, LogIn, Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { useEffect } from "react";
 
 const Index = () => {
   const [showPassword, setShowPassword] = useState(false);
@@ -15,29 +18,53 @@ const Index = () => {
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
   const [regConfirm, setRegConfirm] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { session } = useAuth();
 
-  const handleLogin = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (session) navigate("/dashboard", { replace: true });
+  }, [session, navigate]);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: integrate with backend auth
-    toast({ title: "Вхід", description: "Авторизація буде доступна після підключення бекенду." });
-    navigate("/dashboard");
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: loginEmail,
+      password: loginPassword,
+    });
+    setLoading(false);
+    if (error) {
+      toast({ title: "Помилка входу", description: error.message, variant: "destructive" });
+    }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (regPassword !== regConfirm) {
       toast({ title: "Помилка", description: "Паролі не співпадають", variant: "destructive" });
       return;
     }
-    toast({ title: "Реєстрація", description: "Реєстрація буде доступна після підключення бекенду." });
-    navigate("/dashboard");
+    setLoading(true);
+    const { error } = await supabase.auth.signUp({
+      email: regEmail,
+      password: regPassword,
+      options: {
+        data: { full_name: regName },
+        emailRedirectTo: window.location.origin,
+      },
+    });
+    setLoading(false);
+    if (error) {
+      toast({ title: "Помилка реєстрації", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Успіх!", description: "Перевірте вашу електронну пошту для підтвердження реєстрації." });
+    }
   };
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      {/* Header */}
       <header className="bg-primary text-primary-foreground py-4 px-6 shadow-lg">
         <div className="container mx-auto flex items-center gap-3">
           <Shield className="h-8 w-8" />
@@ -50,10 +77,8 @@ const Index = () => {
         </div>
       </header>
 
-      {/* Main */}
       <main className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-5xl grid md:grid-cols-2 gap-12 items-center">
-          {/* Left: Info */}
           <div className="space-y-6">
             <div className="inline-flex items-center gap-2 bg-accent text-accent-foreground px-4 py-2 rounded-full text-sm font-medium">
               <Shield className="h-4 w-4" />
@@ -64,7 +89,7 @@ const Index = () => {
               <span className="text-primary block">МВС України</span>
             </h2>
             <p className="text-muted-foreground text-lg leading-relaxed">
-              Інформаційна система для моніторингу, аналітики та управління оперативними даними 
+              Інформаційна система для моніторингу, аналітики та управління оперативними даними
               Міністерства внутрішніх справ.
             </p>
             <div className="flex gap-4">
@@ -85,7 +110,6 @@ const Index = () => {
             </div>
           </div>
 
-          {/* Right: Auth Card */}
           <Card className="shadow-2xl border-2 border-primary/10">
             <CardHeader className="text-center pb-2">
               <div className="mx-auto mb-3 h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center">
@@ -110,35 +134,19 @@ const Index = () => {
                   <form onSubmit={handleLogin} className="space-y-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-foreground">Електронна пошта</label>
-                      <Input
-                        type="email"
-                        placeholder="example@mvs.gov.ua"
-                        value={loginEmail}
-                        onChange={(e) => setLoginEmail(e.target.value)}
-                        required
-                      />
+                      <Input type="email" placeholder="example@mvs.gov.ua" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} required />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-foreground">Пароль</label>
                       <div className="relative">
-                        <Input
-                          type={showPassword ? "text" : "password"}
-                          placeholder="Введіть пароль"
-                          value={loginPassword}
-                          onChange={(e) => setLoginPassword(e.target.value)}
-                          required
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
+                        <Input type={showPassword ? "text" : "password"} placeholder="Введіть пароль" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} required />
+                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
                       </div>
                     </div>
-                    <Button type="submit" className="w-full font-semibold text-base h-11">
-                      Увійти
+                    <Button type="submit" className="w-full font-semibold text-base h-11" disabled={loading}>
+                      {loading ? "Завантаження..." : "Увійти"}
                     </Button>
                   </form>
                 </TabsContent>
@@ -147,47 +155,22 @@ const Index = () => {
                   <form onSubmit={handleRegister} className="space-y-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-foreground">Повне ім'я</label>
-                      <Input
-                        placeholder="Іванов Іван Іванович"
-                        value={regName}
-                        onChange={(e) => setRegName(e.target.value)}
-                        required
-                      />
+                      <Input placeholder="Іванов Іван Іванович" value={regName} onChange={e => setRegName(e.target.value)} required />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-foreground">Електронна пошта</label>
-                      <Input
-                        type="email"
-                        placeholder="example@mvs.gov.ua"
-                        value={regEmail}
-                        onChange={(e) => setRegEmail(e.target.value)}
-                        required
-                      />
+                      <Input type="email" placeholder="example@mvs.gov.ua" value={regEmail} onChange={e => setRegEmail(e.target.value)} required />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-foreground">Пароль</label>
-                      <Input
-                        type="password"
-                        placeholder="Мінімум 8 символів"
-                        value={regPassword}
-                        onChange={(e) => setRegPassword(e.target.value)}
-                        required
-                        minLength={8}
-                      />
+                      <Input type="password" placeholder="Мінімум 8 символів" value={regPassword} onChange={e => setRegPassword(e.target.value)} required minLength={8} />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-foreground">Підтвердження паролю</label>
-                      <Input
-                        type="password"
-                        placeholder="Повторіть пароль"
-                        value={regConfirm}
-                        onChange={(e) => setRegConfirm(e.target.value)}
-                        required
-                        minLength={8}
-                      />
+                      <Input type="password" placeholder="Повторіть пароль" value={regConfirm} onChange={e => setRegConfirm(e.target.value)} required minLength={8} />
                     </div>
-                    <Button type="submit" className="w-full font-semibold text-base h-11">
-                      Зареєструватись
+                    <Button type="submit" className="w-full font-semibold text-base h-11" disabled={loading}>
+                      {loading ? "Завантаження..." : "Зареєструватись"}
                     </Button>
                   </form>
                 </TabsContent>
@@ -197,7 +180,6 @@ const Index = () => {
         </div>
       </main>
 
-      {/* Footer */}
       <footer className="bg-primary/5 border-t border-border py-4 text-center text-sm text-muted-foreground">
         © 2026 МВС України. Усі права захищені.
       </footer>
