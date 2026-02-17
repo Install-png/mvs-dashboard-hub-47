@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { startOfDay, subDays, getMonth, getDay, isToday } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,82 +54,62 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   FileText, Users, AlertTriangle, TrendingUp
 };
 
-const initialStats: StatItem[] = [
-  { title: "Активні справи", value: "1,247", icon: "FileText", change: "+12%" },
-  { title: "Співробітники", value: "3,891", icon: "Users", change: "+3%" },
-  { title: "Інциденти сьогодні", value: "47", icon: "AlertTriangle", change: "-8%" },
-  { title: "Показник розкриття", value: "87%", icon: "TrendingUp", change: "+5%" },
-];
+const MONTH_NAMES = ["Січ", "Лют", "Бер", "Кві", "Тра", "Чер", "Лип", "Сер", "Вер", "Жов", "Лис", "Гру"];
+const DAY_NAMES = ["Нд", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
 
-const monthlyData = [
-  { name: "Січ", value: 420 },
-  { name: "Лют", value: 380 },
-  { name: "Бер", value: 510 },
-  { name: "Кві", value: 470 },
-  { name: "Тра", value: 540 },
-  { name: "Чер", value: 610 },
-];
+const computeStats = (events: IncidentRow[], personnel: PersonnelRow[]): StatItem[] => {
+  const active = events.filter(e => e.status !== "Завершено").length;
+  const personnelCount = personnel.length;
+  const todayCount = events.filter(e => isToday(new Date(e.created_at))).length;
+  const resolved = events.filter(e => e.status === "Завершено").length;
+  const rate = events.length > 0 ? Math.round((resolved / events.length) * 100) : 0;
 
-const trendData = [
-  { name: "Пн", incidents: 45, resolved: 38 },
-  { name: "Вт", incidents: 52, resolved: 47 },
-  { name: "Ср", incidents: 38, resolved: 35 },
-  { name: "Чт", incidents: 65, resolved: 58 },
-  { name: "Пт", incidents: 48, resolved: 44 },
-  { name: "Сб", incidents: 30, resolved: 28 },
-  { name: "Нд", incidents: 22, resolved: 20 },
-];
+  return [
+    { title: "Активні справи", value: String(active), icon: "FileText", change: `${events.length} всього` },
+    { title: "Співробітники", value: String(personnelCount), icon: "Users", change: `${personnel.filter(p => p.status === "На службі").length} на службі` },
+    { title: "Інциденти сьогодні", value: String(todayCount), icon: "AlertTriangle", change: `${resolved} вирішено` },
+    { title: "Показник розкриття", value: `${rate}%`, icon: "TrendingUp", change: `${resolved}/${events.length}` },
+  ];
+};
 
-const categoryData = [
-  { name: "Крадіжки", value: 35 },
-  { name: "ДТП", value: 25 },
-  { name: "Шахрайство", value: 20 },
-  { name: "Інше", value: 20 },
-];
+const computeMonthlyData = (events: IncidentRow[]) => {
+  const counts: Record<number, number> = {};
+  events.forEach(e => {
+    const m = getMonth(new Date(e.created_at));
+    counts[m] = (counts[m] || 0) + 1;
+  });
+  return MONTH_NAMES.map((name, i) => ({ name, value: counts[i] || 0 }));
+};
 
-// ── Editable Stat Card ──
-const EditableStatCard = ({ stat, onSave }: { stat: StatItem; onSave: (s: StatItem) => void }) => {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(stat);
-  const Icon = iconMap[stat.icon] || FileText;
+const computeWeeklyTrend = (events: IncidentRow[]) => {
+  const now = new Date();
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = subDays(startOfDay(now), 6 - i);
+    return { date: d, label: DAY_NAMES[getDay(d)] };
+  });
 
-  if (editing) {
-    return (
-      <Card className="border-primary/30 shadow-lg">
-        <CardContent className="p-4 space-y-2">
-          <Input value={draft.title} onChange={e => setDraft({ ...draft, title: e.target.value })} placeholder="Назва" className="text-sm" />
-          <Input value={draft.value} onChange={e => setDraft({ ...draft, value: e.target.value })} placeholder="Значення" className="text-lg font-bold" />
-          <Input value={draft.change} onChange={e => setDraft({ ...draft, change: e.target.value })} placeholder="Зміна" className="text-xs" />
-          <div className="flex gap-2 pt-1">
-            <Button size="sm" onClick={() => { onSave(draft); setEditing(false); }} className="gap-1"><Save className="h-3 w-3" />Зберегти</Button>
-            <Button size="sm" variant="ghost" onClick={() => { setDraft(stat); setEditing(false); }}><X className="h-3 w-3" /></Button>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  return days.map(({ date, label }) => {
+    const dayEvents = events.filter(e => {
+      const ed = startOfDay(new Date(e.created_at));
+      return ed.getTime() === date.getTime();
+    });
+    return {
+      name: label,
+      incidents: dayEvents.length,
+      resolved: dayEvents.filter(e => e.status === "Завершено").length,
+    };
+  });
+};
 
-  return (
-    <Card className="hover:shadow-lg transition-shadow group relative">
-      <button onClick={() => setEditing(true)} className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-muted">
-        <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-      </button>
-      <CardContent className="p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground">{stat.title}</p>
-            <p className="text-2xl font-bold text-foreground mt-1">{stat.value}</p>
-            <span className={`text-xs font-medium ${stat.change.startsWith('+') ? 'text-green-600' : 'text-red-500'}`}>
-              {stat.change} за місяць
-            </span>
-          </div>
-          <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Icon className="h-6 w-6 text-primary" />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+const computeCategoryData = (events: IncidentRow[]) => {
+  const counts: Record<string, number> = {};
+  events.forEach(e => {
+    const type = e.type || "Інше";
+    counts[type] = (counts[type] || 0) + 1;
+  });
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  if (entries.length === 0) return [{ name: "Немає даних", value: 1 }];
+  return entries.map(([name, value]) => ({ name, value }));
 };
 
 // ── Main Dashboard ──
@@ -136,9 +117,12 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { signOut, user } = useAuth();
   const { toast } = useToast();
-  const [stats, setStats] = useState<StatItem[]>(initialStats);
   const [events, setEvents] = useState<IncidentRow[]>([]);
   const [personnel, setPersonnel] = useState<PersonnelRow[]>([]);
+  const stats = useMemo(() => computeStats(events, personnel), [events, personnel]);
+  const monthlyData = useMemo(() => computeMonthlyData(events), [events]);
+  const trendData = useMemo(() => computeWeeklyTrend(events), [events]);
+  const categoryData = useMemo(() => computeCategoryData(events), [events]);
   const [loadingEvents, setLoadingEvents] = useState(true);
   const [loadingPersonnel, setLoadingPersonnel] = useState(true);
 
@@ -178,9 +162,7 @@ const Dashboard = () => {
     fetchPersonnel();
   }, []);
 
-  const handleSaveStat = (index: number, updated: StatItem) => {
-    setStats(prev => prev.map((s, i) => i === index ? updated : s));
-  };
+  // Stats are now computed via useMemo, no manual save needed
 
   // Events CRUD
   const openEventDialog = (event?: IncidentRow) => {
@@ -282,9 +264,25 @@ const Dashboard = () => {
       <main className="p-6 max-w-7xl mx-auto space-y-6">
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {stats.map((stat, i) => (
-            <EditableStatCard key={i} stat={stat} onSave={(s) => handleSaveStat(i, s)} />
-          ))}
+          {stats.map((stat, i) => {
+            const Icon = iconMap[stat.icon] || FileText;
+            return (
+              <Card key={i} className="hover:shadow-lg transition-shadow">
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">{stat.title}</p>
+                      <p className="text-2xl font-bold text-foreground mt-1">{stat.value}</p>
+                      <span className="text-xs font-medium text-muted-foreground">{stat.change}</span>
+                    </div>
+                    <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                      <Icon className="h-6 w-6 text-primary" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
 
         {/* Tabs */}
