@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,9 +6,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import {
   Shield, Users, FileText, AlertTriangle, TrendingUp,
-  BarChart3, Activity, LogOut, Bell, Search, Pencil, Plus, Trash2, Save, X
+  BarChart3, Activity, LogOut, Bell, Search, Pencil, Plus, Trash2, Save, X, Loader2
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -25,20 +27,26 @@ interface StatItem {
   change: string;
 }
 
-interface EventItem {
-  id: number;
+interface IncidentRow {
+  id: string;
+  user_id: string;
   type: string;
   location: string;
   time: string;
   status: string;
+  created_at: string;
+  updated_at: string;
 }
 
-interface PersonnelItem {
-  id: number;
+interface PersonnelRow {
+  id: string;
+  user_id: string;
   name: string;
   rank: string;
   department: string;
   status: string;
+  created_at: string;
+  updated_at: string;
 }
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -50,22 +58,6 @@ const initialStats: StatItem[] = [
   { title: "Співробітники", value: "3,891", icon: "Users", change: "+3%" },
   { title: "Інциденти сьогодні", value: "47", icon: "AlertTriangle", change: "-8%" },
   { title: "Показник розкриття", value: "87%", icon: "TrendingUp", change: "+5%" },
-];
-
-const initialEvents: EventItem[] = [
-  { id: 1, type: "Крадіжка", location: "м. Київ, вул. Хрещатик", time: "14:32", status: "В роботі" },
-  { id: 2, type: "ДТП", location: "м. Одеса, пр. Шевченка", time: "13:15", status: "Розслідується" },
-  { id: 3, type: "Шахрайство", location: "м. Львів, вул. Свободи", time: "12:48", status: "Завершено" },
-  { id: 4, type: "Порушення", location: "м. Харків, вул. Сумська", time: "11:20", status: "В роботі" },
-  { id: 5, type: "Крадіжка", location: "м. Дніпро, пр. Гагаріна", time: "10:05", status: "Завершено" },
-];
-
-const initialPersonnel: PersonnelItem[] = [
-  { id: 1, name: "Іванов Іван Іванович", rank: "Капітан", department: "Слідчий відділ", status: "На службі" },
-  { id: 2, name: "Петренко Олена Сергіївна", rank: "Лейтенант", department: "Кіберполіція", status: "На службі" },
-  { id: 3, name: "Сидоренко Андрій Петрович", rank: "Майор", department: "Патрульна поліція", status: "Відпустка" },
-  { id: 4, name: "Коваленко Марія Олександрівна", rank: "Старший лейтенант", department: "Слідчий відділ", status: "На службі" },
-  { id: 5, name: "Бондаренко Віктор Миколайович", rank: "Полковник", department: "Управління", status: "На службі" },
 ];
 
 const monthlyData = [
@@ -142,54 +134,123 @@ const EditableStatCard = ({ stat, onSave }: { stat: StatItem; onSave: (s: StatIt
 // ── Main Dashboard ──
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
+  const { toast } = useToast();
   const [stats, setStats] = useState<StatItem[]>(initialStats);
-  const [events, setEvents] = useState<EventItem[]>(initialEvents);
-  const [personnel, setPersonnel] = useState<PersonnelItem[]>(initialPersonnel);
+  const [events, setEvents] = useState<IncidentRow[]>([]);
+  const [personnel, setPersonnel] = useState<PersonnelRow[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(true);
+  const [loadingPersonnel, setLoadingPersonnel] = useState(true);
 
   // Event editing
-  const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
+  const [editingEvent, setEditingEvent] = useState<Partial<IncidentRow> | null>(null);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // Personnel editing
-  const [editingPerson, setEditingPerson] = useState<PersonnelItem | null>(null);
+  const [editingPerson, setEditingPerson] = useState<Partial<PersonnelRow> | null>(null);
   const [personDialogOpen, setPersonDialogOpen] = useState(false);
+
+  // Fetch incidents
+  const fetchEvents = async () => {
+    const { data, error } = await supabase.from("incidents" as any).select("*").order("created_at", { ascending: false });
+    if (error) {
+      toast({ title: "Помилка", description: error.message, variant: "destructive" });
+    } else {
+      setEvents((data as unknown as IncidentRow[]) || []);
+    }
+    setLoadingEvents(false);
+  };
+
+  // Fetch personnel
+  const fetchPersonnel = async () => {
+    const { data, error } = await supabase.from("personnel" as any).select("*").order("created_at", { ascending: false });
+    if (error) {
+      toast({ title: "Помилка", description: error.message, variant: "destructive" });
+    } else {
+      setPersonnel((data as unknown as PersonnelRow[]) || []);
+    }
+    setLoadingPersonnel(false);
+  };
+
+  useEffect(() => {
+    fetchEvents();
+    fetchPersonnel();
+  }, []);
 
   const handleSaveStat = (index: number, updated: StatItem) => {
     setStats(prev => prev.map((s, i) => i === index ? updated : s));
   };
 
   // Events CRUD
-  const openEventDialog = (event?: EventItem) => {
-    setEditingEvent(event || { id: Date.now(), type: "", location: "", time: "", status: "В роботі" });
+  const openEventDialog = (event?: IncidentRow) => {
+    setEditingEvent(event || { type: "", location: "", time: "", status: "В роботі" });
     setEventDialogOpen(true);
   };
-  const saveEvent = () => {
-    if (!editingEvent) return;
-    setEvents(prev => {
-      const exists = prev.find(e => e.id === editingEvent.id);
-      if (exists) return prev.map(e => e.id === editingEvent.id ? editingEvent : e);
-      return [...prev, editingEvent];
-    });
+
+  const saveEvent = async () => {
+    if (!editingEvent || !user) return;
+    setSaving(true);
+
+    if (editingEvent.id) {
+      // Update
+      const { error } = await supabase
+        .from("incidents" as any)
+        .update({ type: editingEvent.type, location: editingEvent.location, time: editingEvent.time, status: editingEvent.status } as any)
+        .eq("id", editingEvent.id);
+      if (error) toast({ title: "Помилка", description: error.message, variant: "destructive" });
+    } else {
+      // Insert
+      const { error } = await supabase
+        .from("incidents" as any)
+        .insert({ user_id: user.id, type: editingEvent.type, location: editingEvent.location, time: editingEvent.time, status: editingEvent.status } as any);
+      if (error) toast({ title: "Помилка", description: error.message, variant: "destructive" });
+    }
+
+    setSaving(false);
     setEventDialogOpen(false);
+    fetchEvents();
   };
-  const deleteEvent = (id: number) => setEvents(prev => prev.filter(e => e.id !== id));
+
+  const deleteEvent = async (id: string) => {
+    const { error } = await supabase.from("incidents" as any).delete().eq("id", id);
+    if (error) toast({ title: "Помилка", description: error.message, variant: "destructive" });
+    fetchEvents();
+  };
 
   // Personnel CRUD
-  const openPersonDialog = (person?: PersonnelItem) => {
-    setEditingPerson(person || { id: Date.now(), name: "", rank: "", department: "", status: "На службі" });
+  const openPersonDialog = (person?: PersonnelRow) => {
+    setEditingPerson(person || { name: "", rank: "", department: "", status: "На службі" });
     setPersonDialogOpen(true);
   };
-  const savePerson = () => {
-    if (!editingPerson) return;
-    setPersonnel(prev => {
-      const exists = prev.find(p => p.id === editingPerson.id);
-      if (exists) return prev.map(p => p.id === editingPerson.id ? editingPerson : p);
-      return [...prev, editingPerson];
-    });
+
+  const savePerson = async () => {
+    if (!editingPerson || !user) return;
+    setSaving(true);
+
+    if (editingPerson.id) {
+      const { error } = await supabase
+        .from("personnel" as any)
+        .update({ name: editingPerson.name, rank: editingPerson.rank, department: editingPerson.department, status: editingPerson.status } as any)
+        .eq("id", editingPerson.id);
+      if (error) toast({ title: "Помилка", description: error.message, variant: "destructive" });
+    } else {
+      const { error } = await supabase
+        .from("personnel" as any)
+        .insert({ user_id: user.id, name: editingPerson.name, rank: editingPerson.rank, department: editingPerson.department, status: editingPerson.status } as any);
+      if (error) toast({ title: "Помилка", description: error.message, variant: "destructive" });
+    }
+
+    setSaving(false);
     setPersonDialogOpen(false);
+    fetchPersonnel();
   };
-  const deletePerson = (id: number) => setPersonnel(prev => prev.filter(p => p.id !== id));
+
+  const deletePerson = async (id: string) => {
+    const { error } = await supabase.from("personnel" as any).delete().eq("id", id);
+    if (error) toast({ title: "Помилка", description: error.message, variant: "destructive" });
+    fetchPersonnel();
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -283,21 +344,27 @@ const Dashboard = () => {
                 <CardTitle className="text-base">Останні 3 інциденти</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
-                  {events.slice(0, 3).map(ev => (
-                    <div key={ev.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                      <div>
-                        <span className="font-medium text-sm">{ev.type}</span>
-                        <span className="text-muted-foreground text-sm ml-3">{ev.location}</span>
+                {loadingEvents ? (
+                  <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+                ) : events.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">Немає інцидентів</p>
+                ) : (
+                  <div className="space-y-2">
+                    {events.slice(0, 3).map(ev => (
+                      <div key={ev.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                        <div>
+                          <span className="font-medium text-sm">{ev.type}</span>
+                          <span className="text-muted-foreground text-sm ml-3">{ev.location}</span>
+                        </div>
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                          ev.status === "Завершено" ? "bg-green-100 text-green-700" :
+                          ev.status === "В роботі" ? "bg-accent text-accent-foreground" :
+                          "bg-secondary text-secondary-foreground"
+                        }`}>{ev.status}</span>
                       </div>
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                        ev.status === "Завершено" ? "bg-green-100 text-green-700" :
-                        ev.status === "В роботі" ? "bg-accent text-accent-foreground" :
-                        "bg-secondary text-secondary-foreground"
-                      }`}>{ev.status}</span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -310,45 +377,51 @@ const Dashboard = () => {
                 <Button size="sm" onClick={() => openEventDialog()} className="gap-1"><Plus className="h-4 w-4" />Додати</Button>
               </CardHeader>
               <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border">
-                        <th className="text-left py-2 text-muted-foreground font-medium">Тип</th>
-                        <th className="text-left py-2 text-muted-foreground font-medium">Місцезнаходження</th>
-                        <th className="text-left py-2 text-muted-foreground font-medium">Час</th>
-                        <th className="text-left py-2 text-muted-foreground font-medium">Статус</th>
-                        <th className="text-right py-2 text-muted-foreground font-medium">Дії</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {events.map(event => (
-                        <tr key={event.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                          <td className="py-2.5 font-medium">{event.type}</td>
-                          <td className="py-2.5 text-muted-foreground">{event.location}</td>
-                          <td className="py-2.5 text-muted-foreground">{event.time}</td>
-                          <td className="py-2.5">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                              event.status === "Завершено" ? "bg-green-100 text-green-700" :
-                              event.status === "В роботі" ? "bg-accent text-accent-foreground" :
-                              "bg-secondary text-secondary-foreground"
-                            }`}>{event.status}</span>
-                          </td>
-                          <td className="py-2.5 text-right">
-                            <div className="flex gap-1 justify-end">
-                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEventDialog(event)}>
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => deleteEvent(event.id)}>
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          </td>
+                {loadingEvents ? (
+                  <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+                ) : events.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">Немає інцидентів. Натисніть "Додати" щоб створити перший.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border">
+                          <th className="text-left py-2 text-muted-foreground font-medium">Тип</th>
+                          <th className="text-left py-2 text-muted-foreground font-medium">Місцезнаходження</th>
+                          <th className="text-left py-2 text-muted-foreground font-medium">Час</th>
+                          <th className="text-left py-2 text-muted-foreground font-medium">Статус</th>
+                          <th className="text-right py-2 text-muted-foreground font-medium">Дії</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {events.map(event => (
+                          <tr key={event.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                            <td className="py-2.5 font-medium">{event.type}</td>
+                            <td className="py-2.5 text-muted-foreground">{event.location}</td>
+                            <td className="py-2.5 text-muted-foreground">{event.time}</td>
+                            <td className="py-2.5">
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                                event.status === "Завершено" ? "bg-green-100 text-green-700" :
+                                event.status === "В роботі" ? "bg-accent text-accent-foreground" :
+                                "bg-secondary text-secondary-foreground"
+                              }`}>{event.status}</span>
+                            </td>
+                            <td className="py-2.5 text-right">
+                              <div className="flex gap-1 justify-end">
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEventDialog(event)}>
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => deleteEvent(event.id)}>
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -361,44 +434,50 @@ const Dashboard = () => {
                 <Button size="sm" onClick={() => openPersonDialog()} className="gap-1"><Plus className="h-4 w-4" />Додати</Button>
               </CardHeader>
               <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border">
-                        <th className="text-left py-2 text-muted-foreground font-medium">ПІБ</th>
-                        <th className="text-left py-2 text-muted-foreground font-medium">Звання</th>
-                        <th className="text-left py-2 text-muted-foreground font-medium">Відділ</th>
-                        <th className="text-left py-2 text-muted-foreground font-medium">Статус</th>
-                        <th className="text-right py-2 text-muted-foreground font-medium">Дії</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {personnel.map(person => (
-                        <tr key={person.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                          <td className="py-2.5 font-medium">{person.name}</td>
-                          <td className="py-2.5 text-muted-foreground">{person.rank}</td>
-                          <td className="py-2.5 text-muted-foreground">{person.department}</td>
-                          <td className="py-2.5">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                              person.status === "На службі" ? "bg-green-100 text-green-700" :
-                              "bg-secondary text-secondary-foreground"
-                            }`}>{person.status}</span>
-                          </td>
-                          <td className="py-2.5 text-right">
-                            <div className="flex gap-1 justify-end">
-                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openPersonDialog(person)}>
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => deletePerson(person.id)}>
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          </td>
+                {loadingPersonnel ? (
+                  <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+                ) : personnel.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">Немає персоналу. Натисніть "Додати" щоб додати першого.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border">
+                          <th className="text-left py-2 text-muted-foreground font-medium">ПІБ</th>
+                          <th className="text-left py-2 text-muted-foreground font-medium">Звання</th>
+                          <th className="text-left py-2 text-muted-foreground font-medium">Відділ</th>
+                          <th className="text-left py-2 text-muted-foreground font-medium">Статус</th>
+                          <th className="text-right py-2 text-muted-foreground font-medium">Дії</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {personnel.map(person => (
+                          <tr key={person.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                            <td className="py-2.5 font-medium">{person.name}</td>
+                            <td className="py-2.5 text-muted-foreground">{person.rank}</td>
+                            <td className="py-2.5 text-muted-foreground">{person.department}</td>
+                            <td className="py-2.5">
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                                person.status === "На службі" ? "bg-green-100 text-green-700" :
+                                "bg-secondary text-secondary-foreground"
+                              }`}>{person.status}</span>
+                            </td>
+                            <td className="py-2.5 text-right">
+                              <div className="flex gap-1 justify-end">
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openPersonDialog(person)}>
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => deletePerson(person.id)}>
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -465,25 +544,25 @@ const Dashboard = () => {
       <Dialog open={eventDialogOpen} onOpenChange={setEventDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingEvent && events.find(e => e.id === editingEvent.id) ? "Редагувати інцидент" : "Новий інцидент"}</DialogTitle>
+            <DialogTitle>{editingEvent?.id ? "Редагувати інцидент" : "Новий інцидент"}</DialogTitle>
           </DialogHeader>
           {editingEvent && (
             <div className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Тип</label>
-                <Input value={editingEvent.type} onChange={e => setEditingEvent({ ...editingEvent, type: e.target.value })} placeholder="Крадіжка, ДТП..." />
+                <Input value={editingEvent.type || ""} onChange={e => setEditingEvent({ ...editingEvent, type: e.target.value })} placeholder="Крадіжка, ДТП..." />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Місцезнаходження</label>
-                <Input value={editingEvent.location} onChange={e => setEditingEvent({ ...editingEvent, location: e.target.value })} placeholder="м. Київ, вул..." />
+                <Input value={editingEvent.location || ""} onChange={e => setEditingEvent({ ...editingEvent, location: e.target.value })} placeholder="м. Київ, вул..." />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Час</label>
-                <Input value={editingEvent.time} onChange={e => setEditingEvent({ ...editingEvent, time: e.target.value })} placeholder="14:30" />
+                <Input value={editingEvent.time || ""} onChange={e => setEditingEvent({ ...editingEvent, time: e.target.value })} placeholder="14:30" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Статус</label>
-                <Select value={editingEvent.status} onValueChange={val => setEditingEvent({ ...editingEvent, status: val })}>
+                <Select value={editingEvent.status || "В роботі"} onValueChange={val => setEditingEvent({ ...editingEvent, status: val })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="В роботі">В роботі</SelectItem>
@@ -496,7 +575,10 @@ const Dashboard = () => {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEventDialogOpen(false)}>Скасувати</Button>
-            <Button onClick={saveEvent}>Зберегти</Button>
+            <Button onClick={saveEvent} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Зберегти
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -505,25 +587,25 @@ const Dashboard = () => {
       <Dialog open={personDialogOpen} onOpenChange={setPersonDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingPerson && personnel.find(p => p.id === editingPerson.id) ? "Редагувати співробітника" : "Новий співробітник"}</DialogTitle>
+            <DialogTitle>{editingPerson?.id ? "Редагувати співробітника" : "Новий співробітник"}</DialogTitle>
           </DialogHeader>
           {editingPerson && (
             <div className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">ПІБ</label>
-                <Input value={editingPerson.name} onChange={e => setEditingPerson({ ...editingPerson, name: e.target.value })} placeholder="Прізвище Ім'я По батькові" />
+                <Input value={editingPerson.name || ""} onChange={e => setEditingPerson({ ...editingPerson, name: e.target.value })} placeholder="Прізвище Ім'я По батькові" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Звання</label>
-                <Input value={editingPerson.rank} onChange={e => setEditingPerson({ ...editingPerson, rank: e.target.value })} placeholder="Капітан, Лейтенант..." />
+                <Input value={editingPerson.rank || ""} onChange={e => setEditingPerson({ ...editingPerson, rank: e.target.value })} placeholder="Капітан, Лейтенант..." />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Відділ</label>
-                <Input value={editingPerson.department} onChange={e => setEditingPerson({ ...editingPerson, department: e.target.value })} placeholder="Слідчий відділ..." />
+                <Input value={editingPerson.department || ""} onChange={e => setEditingPerson({ ...editingPerson, department: e.target.value })} placeholder="Слідчий відділ..." />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Статус</label>
-                <Select value={editingPerson.status} onValueChange={val => setEditingPerson({ ...editingPerson, status: val })}>
+                <Select value={editingPerson.status || "На службі"} onValueChange={val => setEditingPerson({ ...editingPerson, status: val })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="На службі">На службі</SelectItem>
@@ -537,7 +619,10 @@ const Dashboard = () => {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setPersonDialogOpen(false)}>Скасувати</Button>
-            <Button onClick={savePerson}>Зберегти</Button>
+            <Button onClick={savePerson} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Зберегти
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
