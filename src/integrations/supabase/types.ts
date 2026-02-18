@@ -14,33 +14,123 @@ export type Database = {
   }
   public: {
     Tables: {
+      calendar_events: {
+        Row: {
+          created_at: string
+          description: string | null
+          event_date: string
+          event_time: string | null
+          id: string
+          location: string | null
+          ng_equipment_units: number | null
+          ng_operations_conducted: number | null
+          ng_personnel_deployed: number | null
+          police_arrests: number | null
+          police_calls: number | null
+          police_patrols_deployed: number | null
+          police_reports_filed: number | null
+          service_national_guard: boolean
+          service_other: string | null
+          service_police: boolean
+          service_ses: boolean
+          ses_equipment_used: string | null
+          ses_fires_extinguished: number | null
+          ses_people_rescued: number | null
+          ses_personnel_involved: number | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          event_date?: string
+          event_time?: string | null
+          id?: string
+          location?: string | null
+          ng_equipment_units?: number | null
+          ng_operations_conducted?: number | null
+          ng_personnel_deployed?: number | null
+          police_arrests?: number | null
+          police_calls?: number | null
+          police_patrols_deployed?: number | null
+          police_reports_filed?: number | null
+          service_national_guard?: boolean
+          service_other?: string | null
+          service_police?: boolean
+          service_ses?: boolean
+          ses_equipment_used?: string | null
+          ses_fires_extinguished?: number | null
+          ses_people_rescued?: number | null
+          ses_personnel_involved?: number | null
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          event_date?: string
+          event_time?: string | null
+          id?: string
+          location?: string | null
+          ng_equipment_units?: number | null
+          ng_operations_conducted?: number | null
+          ng_personnel_deployed?: number | null
+          police_arrests?: number | null
+          police_calls?: number | null
+          police_patrols_deployed?: number | null
+          police_reports_filed?: number | null
+          service_national_guard?: boolean
+          service_other?: string | null
+          service_police?: boolean
+          service_ses?: boolean
+          ses_equipment_used?: string | null
+          ses_fires_extinguished?: number | null
+          ses_people_rescued?: number | null
+          ses_personnel_involved?: number | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       incidents: {
         Row: {
           created_at: string
+          description: string | null
           id: string
           location: string
+          service: string | null
           status: string
           time: string
+          title: string | null
           type: string
           updated_at: string
           user_id: string
         }
         Insert: {
           created_at?: string
+          description?: string | null
           id?: string
           location?: string
+          service?: string | null
           status?: string
           time?: string
+          title?: string | null
           type?: string
           updated_at?: string
           user_id: string
         }
         Update: {
           created_at?: string
+          description?: string | null
           id?: string
           location?: string
+          service?: string | null
           status?: string
           time?: string
+          title?: string | null
           type?: string
           updated_at?: string
           user_id?: string
@@ -107,6 +197,42 @@ export type Database = {
           position?: string
           rank?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      reports: {
+        Row: {
+          created_at: string
+          data: Json | null
+          generated_at: string
+          id: string
+          period_end: string
+          period_start: string
+          report_type: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json | null
+          generated_at?: string
+          id?: string
+          period_end: string
+          period_start: string
+          report_type?: string
+          title?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json | null
+          generated_at?: string
+          id?: string
+          period_end?: string
+          period_start?: string
+          report_type?: string
+          title?: string
+          user_id?: string
         }
         Relationships: []
       }
