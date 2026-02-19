@@ -9,8 +9,11 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import UkraineMap, { OBLAST_PATHS } from "@/components/UkraineMap";
+import UkraineMap, { REGION_NAME_MAP } from "@/components/UkraineMap";
 import type { RegionData } from "@/components/UkraineMap";
+
+const REGION_IDS = Object.keys(REGION_NAME_MAP);
+const REGIONS_LIST = REGION_IDS.map((id) => ({ id, name: REGION_NAME_MAP[id] }));
 import { useCalendarEvents, CalendarEvent } from "@/hooks/useCalendarEvents";
 import {
   CalendarIcon, X, FileText, MapPin, Clock, Users, Flame,
@@ -31,7 +34,7 @@ const SituationCenterPage = () => {
 
   // Map events to regions by location matching
   const regionData = useMemo((): RegionData[] => {
-    return OBLAST_PATHS.map((oblast) => {
+    return REGIONS_LIST.map((oblast) => {
       const matching = events.filter((e) => {
         const loc = (e.location || "").toLowerCase();
         const name = oblast.name.toLowerCase().replace("ська", "").replace("ська", "");
@@ -48,7 +51,7 @@ const SituationCenterPage = () => {
   // Get events for selected region
   const selectedRegionInfo = useMemo(() => {
     if (!selectedRegion) return null;
-    const oblast = OBLAST_PATHS.find((o) => o.id === selectedRegion);
+    const oblast = REGIONS_LIST.find((o) => o.id === selectedRegion);
     if (!oblast) return null;
 
     const regionEvents = events.filter((e) => {
