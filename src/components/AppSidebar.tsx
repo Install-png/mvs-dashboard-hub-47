@@ -1,7 +1,7 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  Shield, LayoutDashboard, CalendarDays, FileBarChart, Settings, LogOut, Sun, Moon,
+  Shield, LayoutDashboard, CalendarDays, FileBarChart, Settings, LogOut, Sun, Moon, Map,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,7 @@ import { useTheme } from "@/hooks/useTheme";
 
 const navItems = [
   { label: "Дашборд", icon: LayoutDashboard, path: "/dashboard" },
+  { label: "Ситуаційний центр", icon: Map, path: "/situation-center" },
   { label: "Календар", icon: CalendarDays, path: "/calendar" },
   { label: "Звіти", icon: FileBarChart, path: "/reports" },
   { label: "Налаштування", icon: Settings, path: "/settings" },
