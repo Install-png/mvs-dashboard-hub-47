@@ -1,12 +1,12 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, CalendarDays, FileBarChart, Settings } from "lucide-react";
+import { LayoutDashboard, CalendarDays, FileBarChart, Settings, Map } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
   { label: "Дашборд", icon: LayoutDashboard, path: "/dashboard" },
+  { label: "Карта", icon: Map, path: "/situation-center" },
   { label: "Календар", icon: CalendarDays, path: "/calendar" },
   { label: "Звіти", icon: FileBarChart, path: "/reports" },
-  { label: "Ще", icon: Settings, path: "/settings" },
 ];
 
 const MobileNav = () => {
