@@ -15,13 +15,15 @@ import { Progress } from "@/components/ui/progress";
 import UkraineMap, { REGION_NAME_MAP } from "@/components/UkraineMap";
 import type { RegionData } from "@/components/UkraineMap";
 import {
-  MOCK_INCIDENTS, INCIDENT_TYPE_LABELS, SEVERITY_CONFIG, STATUS_CONFIG, TYPE_ICONS,
+  INCIDENT_TYPE_LABELS, SEVERITY_CONFIG, STATUS_CONFIG, TYPE_ICONS,
   type Incident, type IncidentType, type SeverityLevel, type IncidentStatus,
 } from "@/data/mockIncidents";
+import { useIncidents } from "@/hooks/useIncidents";
+import { useAuth } from "@/hooks/useAuth";
 import {
   CalendarIcon, X, FileText, MapPin, Clock, Users, Flame,
   ShieldCheck, AlertTriangle, Download, Plus, Filter,
-  Ambulance, Shield, TrendingUp, Activity, BarChart2,
+  Ambulance, Shield, TrendingUp, Activity, BarChart2, Trash2, Edit,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import jsPDF from "jspdf";
@@ -35,8 +37,11 @@ type FilterSeverity = "all" | SeverityLevel;
 type FilterStatus = "all" | IncidentStatus;
 
 const SituationCenterPage = () => {
+  // Data from DB
+  const { incidents, loading: incidentsLoading, createIncident, updateIncident, deleteIncident } = useIncidents();
+  const { user } = useAuth();
+
   // State
-  const [incidents, setIncidents] = useState<Incident[]>(MOCK_INCIDENTS);
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [filterService, setFilterService] = useState<FilterService>("all");
@@ -44,6 +49,7 @@ const SituationCenterPage = () => {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [dateFilter, setDateFilter] = useState<Date | undefined>(undefined);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingIncident, setEditingIncident] = useState<Incident | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -256,7 +262,7 @@ const SituationCenterPage = () => {
     impact: { rescued: 0, injured: 0, fatalities: 0, damage_est: "", damage_uah: 0 },
   });
 
-  const handleAddIncident = () => {
+  const handleAddIncident = async () => {
     if (!newIncident.title) return;
     const regionInfo = REGIONS_LIST.find((r) => r.id === newIncident.region);
     const coordMap: Record<string, [number, number]> = {
@@ -269,8 +275,7 @@ const SituationCenterPage = () => {
       ck: [31.9795, 49.4444], kr: [32.2597, 48.5132], sm: [34.7981, 50.9077],
       pl: [34.5514, 49.5883], lg: [38.9228, 48.5740], ks_a: [33.9902, 46.9658],
     };
-    const inc: Incident = {
-      id: `inc-${Date.now()}`,
+    const inc: Partial<Incident> = {
       timestamp: new Date().toISOString(),
       coordinates: coordMap[newIncident.region ?? "kiev"] ?? [31.5, 48.5],
       region: newIncident.region ?? "kiev",
@@ -286,7 +291,14 @@ const SituationCenterPage = () => {
       description: newIncident.description ?? "",
       lead_agency: newIncident.lead_agency ?? "ДСНС",
     };
-    setIncidents((prev) => [inc, ...prev]);
+
+    if (editingIncident) {
+      await updateIncident(editingIncident.id, inc);
+      setEditingIncident(null);
+    } else {
+      await createIncident(inc);
+    }
+
     setShowAddForm(false);
     setNewIncident({
       title: "", type: "Fire", severity: "Major", status: "Ongoing",
@@ -294,6 +306,21 @@ const SituationCenterPage = () => {
       resources: { ses_units: 0, police_units: 0, medical_units: 0, personnel_total: 0 },
       impact: { rescued: 0, injured: 0, fatalities: 0, damage_est: "", damage_uah: 0 },
     });
+  };
+
+  const handleEditIncident = (inc: Incident) => {
+    setNewIncident({
+      title: inc.title, type: inc.type, severity: inc.severity, status: inc.status,
+      region: inc.region, description: inc.description, lead_agency: inc.lead_agency,
+      resources: { ...inc.resources }, impact: { ...inc.impact },
+    });
+    setEditingIncident(inc);
+    setShowAddForm(true);
+  };
+
+  const handleDeleteIncident = async (id: string) => {
+    await deleteIncident(id);
+    if (selectedIncident?.id === id) setSelectedIncident(null);
   };
 
   return (
@@ -530,6 +557,9 @@ const SituationCenterPage = () => {
               incident={selectedIncident}
               progress={getResolutionProgress(selectedIncident)}
               onClose={() => setSelectedIncident(null)}
+              onEdit={handleEditIncident}
+              onDelete={handleDeleteIncident}
+              canEdit={user?.id === (selectedIncident as any).id ? false : true}
             />
           ) : selectedRegion ? (
             <RegionPanel
@@ -547,7 +577,7 @@ const SituationCenterPage = () => {
       <Dialog open={showAddForm} onOpenChange={setShowAddForm}>
         <DialogContent className="max-w-lg bg-[hsl(222,47%,10%)] border-[hsl(215,20%,22%)] text-[hsl(210,40%,95%)]">
           <DialogHeader>
-            <DialogTitle style={{ fontFamily: "Montserrat" }}>Новий інцидент</DialogTitle>
+            <DialogTitle style={{ fontFamily: "Montserrat" }}>{editingIncident ? "Редагувати інцидент" : "Новий інцидент"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
@@ -647,11 +677,11 @@ const SituationCenterPage = () => {
             </div>
           </div>
 
-          <div className="flex gap-2 pt-2">
+          <div className="flex items-center gap-2 pt-2">
             <Button onClick={handleAddIncident} className="flex-1" disabled={!newIncident.title}>
-              Додати інцидент
+              {editingIncident ? "Зберегти зміни" : "Додати інцидент"}
             </Button>
-            <Button variant="outline" onClick={() => setShowAddForm(false)} className="border-[hsl(215,20%,22%)]">
+            <Button variant="outline" onClick={() => { setShowAddForm(false); setEditingIncident(null); }} className="border-[hsl(215,20%,22%)]">
               Скасувати
             </Button>
           </div>
@@ -695,8 +725,9 @@ const LegendItem = ({ color, label }: { color: string; label: string }) => (
   </span>
 );
 
-const IncidentDetail = ({ incident, progress, onClose }: {
-  incident: Incident; progress: number; onClose: () => void
+const IncidentDetail = ({ incident, progress, onClose, onEdit, onDelete }: {
+  incident: Incident; progress: number; onClose: () => void;
+  onEdit?: (inc: Incident) => void; onDelete?: (id: string) => Promise<void>; canEdit?: boolean;
 }) => {
   const sev = SEVERITY_CONFIG[incident.severity];
   const sta = STATUS_CONFIG[incident.status];
@@ -713,9 +744,21 @@ const IncidentDetail = ({ incident, progress, onClose }: {
             <p className="text-[10px] text-muted-foreground">{incident.regionName}</p>
           </div>
         </div>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
-          <X className="h-3.5 w-3.5" />
-        </Button>
+        <div className="flex items-center gap-1">
+          {onEdit && (
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onEdit(incident)}>
+              <Edit className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {onDelete && (
+            <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 hover:text-red-300" onClick={() => onDelete(incident.id)}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
 
       <ScrollArea className="flex-1">

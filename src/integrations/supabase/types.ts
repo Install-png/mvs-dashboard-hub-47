@@ -97,11 +97,28 @@ export type Database = {
       }
       incidents: {
         Row: {
+          coordinates_lat: number | null
+          coordinates_lng: number | null
           created_at: string
+          damage_est: string | null
+          damage_uah: number | null
           description: string | null
+          estimated_resolution_time: string | null
+          fatalities: number | null
           id: string
+          injured: number | null
+          lead_agency: string | null
           location: string
+          medical_units: number | null
+          personnel_total: number | null
+          police_units: number | null
+          region_id: string | null
+          region_name: string | null
+          rescued: number | null
+          risk_level: number | null
           service: string | null
+          ses_units: number | null
+          severity: string | null
           status: string
           time: string
           title: string | null
@@ -110,11 +127,28 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          coordinates_lat?: number | null
+          coordinates_lng?: number | null
           created_at?: string
+          damage_est?: string | null
+          damage_uah?: number | null
           description?: string | null
+          estimated_resolution_time?: string | null
+          fatalities?: number | null
           id?: string
+          injured?: number | null
+          lead_agency?: string | null
           location?: string
+          medical_units?: number | null
+          personnel_total?: number | null
+          police_units?: number | null
+          region_id?: string | null
+          region_name?: string | null
+          rescued?: number | null
+          risk_level?: number | null
           service?: string | null
+          ses_units?: number | null
+          severity?: string | null
           status?: string
           time?: string
           title?: string | null
@@ -123,11 +157,28 @@ export type Database = {
           user_id: string
         }
         Update: {
+          coordinates_lat?: number | null
+          coordinates_lng?: number | null
           created_at?: string
+          damage_est?: string | null
+          damage_uah?: number | null
           description?: string | null
+          estimated_resolution_time?: string | null
+          fatalities?: number | null
           id?: string
+          injured?: number | null
+          lead_agency?: string | null
           location?: string
+          medical_units?: number | null
+          personnel_total?: number | null
+          police_units?: number | null
+          region_id?: string | null
+          region_name?: string | null
+          rescued?: number | null
+          risk_level?: number | null
           service?: string | null
+          ses_units?: number | null
+          severity?: string | null
           status?: string
           time?: string
           title?: string | null
