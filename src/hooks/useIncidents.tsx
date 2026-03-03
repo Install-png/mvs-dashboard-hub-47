@@ -5,11 +5,17 @@ import type { Incident, IncidentType, IncidentStatus, SeverityLevel } from "@/da
 import { VALID_STATUSES, VALID_SEVERITIES, VALID_TYPES } from "@/data/mockIncidents";
 import { toast } from "sonner";
 
+function isValidDate(v: any): boolean {
+  if (!v) return false;
+  const d = new Date(v);
+  return !isNaN(d.getTime());
+}
+
 // Map DB row to front-end Incident type
 function rowToIncident(row: any): Incident {
   return {
     id: row.id,
-    timestamp: row.time || row.created_at,
+    timestamp: isValidDate(row.time) ? row.time : (isValidDate(row.created_at) ? row.created_at : new Date().toISOString()),
     coordinates: [row.coordinates_lng ?? 0, row.coordinates_lat ?? 0],
     region: row.region_id ?? "",
     regionName: row.region_name ?? row.location ?? "",
