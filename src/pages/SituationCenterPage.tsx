@@ -18,6 +18,9 @@ import {
   INCIDENT_TYPE_LABELS, SEVERITY_CONFIG, STATUS_CONFIG, TYPE_ICONS,
   type Incident, type IncidentType, type SeverityLevel, type IncidentStatus,
 } from "@/data/mockIncidents";
+
+const DEFAULT_SEV = { label: "Невідомо", color: "text-muted-foreground", bgColor: "bg-muted border-border" };
+const DEFAULT_STA = { label: "Невідомо", color: "text-muted-foreground" };
 import { useIncidents } from "@/hooks/useIncidents";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -451,8 +454,8 @@ const SituationCenterPage = () => {
           <ScrollArea className="flex-1">
             <div className="p-2 space-y-1.5">
               {sortedBySeverity.map((inc) => {
-                const sev = SEVERITY_CONFIG[inc.severity];
-                const sta = STATUS_CONFIG[inc.status];
+                const sev = SEVERITY_CONFIG[inc.severity] || DEFAULT_SEV;
+                const sta = STATUS_CONFIG[inc.status] || DEFAULT_STA;
                 const progress = getResolutionProgress(inc);
                 return (
                   <div
@@ -729,8 +732,8 @@ const IncidentDetail = ({ incident, progress, onClose, onEdit, onDelete }: {
   incident: Incident; progress: number; onClose: () => void;
   onEdit?: (inc: Incident) => void; onDelete?: (id: string) => Promise<void>; canEdit?: boolean;
 }) => {
-  const sev = SEVERITY_CONFIG[incident.severity];
-  const sta = STATUS_CONFIG[incident.status];
+  const sev = SEVERITY_CONFIG[incident.severity] || DEFAULT_SEV;
+  const sta = STATUS_CONFIG[incident.status] || DEFAULT_STA;
 
   return (
     <>
@@ -917,7 +920,7 @@ const RegionPanel = ({ regionName, incidents, onClose, onSelectIncident, getProg
       ) : (
         <div className="p-3 space-y-2">
           {incidents.map((inc) => {
-            const sev = SEVERITY_CONFIG[inc.severity];
+            const sev = SEVERITY_CONFIG[inc.severity] || DEFAULT_SEV;
             return (
               <Card key={inc.id}
                 onClick={() => onSelectIncident(inc)}
