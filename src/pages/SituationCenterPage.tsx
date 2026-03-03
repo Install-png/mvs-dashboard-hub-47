@@ -193,7 +193,7 @@ const SituationCenterPage = () => {
       inc.resources.personnel_total.toString(),
       inc.impact.rescued.toString(),
       inc.impact.injured.toString(),
-      STATUS_CONFIG[inc.status].label,
+      (STATUS_CONFIG[inc.status] || DEFAULT_STA).label,
       inc.severity === "Critical" ? "КРИТИЧНИЙ" : inc.severity === "Major" ? "Значний" : "Незначний",
     ]);
 
