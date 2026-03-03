@@ -32,6 +32,12 @@ import { cn } from "@/lib/utils";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
+function safeDate(v: any): Date {
+  if (!v) return new Date();
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+
 const REGION_IDS = Object.keys(REGION_NAME_MAP);
 const REGIONS_LIST = REGION_IDS.map((id) => ({ id, name: REGION_NAME_MAP[id] }));
 
@@ -66,7 +72,7 @@ const SituationCenterPage = () => {
       if (filterStatus !== "all" && inc.status !== filterStatus) return false;
       if (dateFilter) {
         const d = format(dateFilter, "yyyy-MM-dd");
-        const incDate = format(new Date(inc.timestamp), "yyyy-MM-dd");
+        const incDate = format(safeDate(inc.timestamp), "yyyy-MM-dd");
         if (incDate !== d) return false;
       }
       return true;
@@ -483,7 +489,7 @@ const SituationCenterPage = () => {
                       <span>👥 {inc.resources.personnel_total}</span>
                       {inc.impact.rescued > 0 && <span className="text-green-400">🆘 {inc.impact.rescued}</span>}
                       {inc.impact.injured > 0 && <span className="text-yellow-400">⚠️ {inc.impact.injured}</span>}
-                      <span className="ml-auto">{formatDistanceToNow(new Date(inc.timestamp), { locale: uk, addSuffix: true })}</span>
+                      <span className="ml-auto">{formatDistanceToNow(safeDate(inc.timestamp), { locale: uk, addSuffix: true })}</span>
                     </div>
                     {inc.status !== "Resolved" && (
                       <Progress
@@ -836,7 +842,7 @@ const IncidentDetail = ({ incident, progress, onClose, onEdit, onDelete }: {
             <div>
               <div className="flex justify-between text-[9px] text-muted-foreground mb-1">
                 <span>Прогрес ліквідації</span>
-                <span>ETA: {format(new Date(incident.estimated_resolution_time), "HH:mm dd.MM")}</span>
+                <span>ETA: {format(safeDate(incident.estimated_resolution_time), "HH:mm dd.MM")}</span>
               </div>
               <Progress value={progress} className="h-1.5 bg-[hsl(215,20%,18%)]" />
               <p className="text-[9px] text-muted-foreground mt-0.5">{Math.round(progress)}%</p>
@@ -879,7 +885,7 @@ const IncidentDetail = ({ incident, progress, onClose, onEdit, onDelete }: {
 
           <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground">
             <Clock className="h-3 w-3" />
-            {formatDistanceToNow(new Date(incident.timestamp), { locale: uk, addSuffix: true })}
+            {formatDistanceToNow(safeDate(incident.timestamp), { locale: uk, addSuffix: true })}
             <MapPin className="h-3 w-3 ml-2" />
             {incident.coordinates[1].toFixed(4)}°N {incident.coordinates[0].toFixed(4)}°E
           </div>
