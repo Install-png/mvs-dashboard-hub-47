@@ -2,6 +2,10 @@ export type IncidentType = "Fire" | "Rescue" | "Crime" | "EOD" | "Medical" | "Fl
 export type IncidentStatus = "Ongoing" | "Containment" | "Resolved";
 export type SeverityLevel = "Critical" | "Major" | "Minor";
 
+export const VALID_STATUSES: IncidentStatus[] = ["Ongoing", "Containment", "Resolved"];
+export const VALID_SEVERITIES: SeverityLevel[] = ["Critical", "Major", "Minor"];
+export const VALID_TYPES: IncidentType[] = ["Fire", "Rescue", "Crime", "EOD", "Medical", "Flood"];
+
 export interface Incident {
   id: string;
   timestamp: string;
