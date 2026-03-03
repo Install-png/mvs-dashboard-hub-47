@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import type { Incident, IncidentType, IncidentStatus, SeverityLevel } from "@/data/mockIncidents";
+import { VALID_STATUSES, VALID_SEVERITIES, VALID_TYPES } from "@/data/mockIncidents";
 import { toast } from "sonner";
 
 // Map DB row to front-end Incident type
@@ -36,16 +37,25 @@ function rowToIncident(row: any): Incident {
   };
 }
 
+function validateIncident(inc: Partial<Incident>): string | null {
+  if (!inc.title?.trim()) return "Назва інциденту обов'язкова";
+  if (inc.title.length > 200) return "Назва занадто довга (макс. 200 символів)";
+  if (inc.severity && !VALID_SEVERITIES.includes(inc.severity)) return `Невірний рівень: ${inc.severity}`;
+  if (inc.status && !VALID_STATUSES.includes(inc.status)) return `Невірний статус: ${inc.status}`;
+  if (inc.type && !VALID_TYPES.includes(inc.type)) return `Невірний тип: ${inc.type}`;
+  return null;
+}
+
 // Map front-end Incident to DB insert/update shape
 function incidentToRow(inc: Partial<Incident>, userId: string) {
   return {
     user_id: userId,
-    title: inc.title ?? "",
+    title: (inc.title ?? "").trim().substring(0, 200),
     type: inc.type ?? "Rescue",
     status: inc.status ?? "Ongoing",
     time: inc.timestamp ?? new Date().toISOString(),
     location: inc.regionName ?? "",
-    description: inc.description ?? "",
+    description: (inc.description ?? "").substring(0, 2000),
     service: inc.lead_agency ?? "ДСНС",
     coordinates_lng: inc.coordinates?.[0] ?? 0,
     coordinates_lat: inc.coordinates?.[1] ?? 0,
@@ -123,6 +133,11 @@ export function useIncidents() {
         toast.error("Необхідна авторизація");
         return null;
       }
+      const validationError = validateIncident(inc);
+      if (validationError) {
+        toast.error(validationError);
+        return null;
+      }
       const row = incidentToRow(inc, user.id);
       const { data, error } = await supabase
         .from("incidents")
@@ -146,6 +161,11 @@ export function useIncidents() {
     async (id: string, updates: Partial<Incident>) => {
       if (!user) {
         toast.error("Необхідна авторизація");
+        return false;
+      }
+      const validationError = validateIncident({ title: "placeholder", ...updates });
+      if (validationError) {
+        toast.error(validationError);
         return false;
       }
       const partial: Record<string, any> = {};
