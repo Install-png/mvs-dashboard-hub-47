@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import type { Incident, IncidentType, IncidentStatus, SeverityLevel } from "@/data/mockIncidents";
+import type { Incident, IncidentType, IncidentStatus, SeverityLevel, IncidentCategory } from "@/data/mockIncidents";
 import { VALID_STATUSES, VALID_SEVERITIES, VALID_TYPES } from "@/data/mockIncidents";
 import { toast } from "sonner";
+import { useIncidentStore } from "@/stores/useIncidentStore";
 
 function isValidDate(v: any): boolean {
   if (!v) return false;
@@ -11,7 +12,6 @@ function isValidDate(v: any): boolean {
   return !isNaN(d.getTime());
 }
 
-// Map DB row to front-end Incident type
 function rowToIncident(row: any): Incident {
   return {
     id: row.id,
@@ -19,8 +19,10 @@ function rowToIncident(row: any): Incident {
     coordinates: [row.coordinates_lng ?? 0, row.coordinates_lat ?? 0],
     region: row.region_id ?? "",
     regionName: row.region_name ?? row.location ?? "",
+    address: row.address ?? "",
     title: row.title ?? "",
     type: (row.type || "Rescue") as IncidentType,
+    category: (row.category || "SES") as IncidentCategory,
     status: (row.status || "Ongoing") as IncidentStatus,
     severity: (row.severity || "Major") as SeverityLevel,
     resources: {
@@ -28,6 +30,7 @@ function rowToIncident(row: any): Incident {
       police_units: row.police_units ?? 0,
       medical_units: row.medical_units ?? 0,
       personnel_total: row.personnel_total ?? 0,
+      specialized_equipment: row.specialized_equipment ?? [],
     },
     impact: {
       rescued: row.rescued ?? 0,
@@ -40,6 +43,7 @@ function rowToIncident(row: any): Incident {
     risk_level: row.risk_level ?? 5,
     description: row.description ?? "",
     lead_agency: row.lead_agency ?? "ДСНС",
+    last_updated: row.updated_at ?? new Date().toISOString(),
   };
 }
 
@@ -49,18 +53,22 @@ function validateIncident(inc: Partial<Incident>): string | null {
   if (inc.severity && !VALID_SEVERITIES.includes(inc.severity)) return `Невірний рівень: ${inc.severity}`;
   if (inc.status && !VALID_STATUSES.includes(inc.status)) return `Невірний статус: ${inc.status}`;
   if (inc.type && !VALID_TYPES.includes(inc.type)) return `Невірний тип: ${inc.type}`;
+  if (inc.severity === "Critical" && (!inc.resources?.personnel_total || inc.resources.personnel_total === 0)) {
+    return "Критичні інциденти потребують ресурсів (personnel > 0)";
+  }
   return null;
 }
 
-// Map front-end Incident to DB insert/update shape
 function incidentToRow(inc: Partial<Incident>, userId: string) {
   return {
     user_id: userId,
     title: (inc.title ?? "").trim().substring(0, 200),
     type: inc.type ?? "Rescue",
+    category: inc.category ?? "SES",
     status: inc.status ?? "Ongoing",
     time: inc.timestamp ?? new Date().toISOString(),
     location: inc.regionName ?? "",
+    address: inc.address ?? "",
     description: (inc.description ?? "").substring(0, 2000),
     service: inc.lead_agency ?? "ДСНС",
     coordinates_lng: inc.coordinates?.[0] ?? 0,
@@ -73,6 +81,7 @@ function incidentToRow(inc: Partial<Incident>, userId: string) {
     police_units: inc.resources?.police_units ?? 0,
     medical_units: inc.resources?.medical_units ?? 0,
     personnel_total: inc.resources?.personnel_total ?? 0,
+    specialized_equipment: inc.resources?.specialized_equipment ?? [],
     rescued: inc.impact?.rescued ?? 0,
     injured: inc.impact?.injured ?? 0,
     fatalities: inc.impact?.fatalities ?? 0,
@@ -83,12 +92,19 @@ function incidentToRow(inc: Partial<Incident>, userId: string) {
   };
 }
 
+async function logAudit(userId: string, incidentId: string, action: string, changes: Record<string, any>) {
+  await supabase.from("incident_audit_log" as any).insert({
+    user_id: userId,
+    incident_id: incidentId,
+    action,
+    changes,
+  } as any);
+}
+
 export function useIncidents() {
   const { user } = useAuth();
-  const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [loading, setLoading] = useState(true);
+  const store = useIncidentStore();
 
-  // Fetch all incidents
   const fetchIncidents = useCallback(async () => {
     const { data, error } = await supabase
       .from("incidents")
@@ -99,12 +115,11 @@ export function useIncidents() {
       console.error("Error fetching incidents:", error);
       toast.error("Помилка завантаження інцидентів");
     } else {
-      setIncidents((data ?? []).map(rowToIncident));
+      store.setIncidents((data ?? []).map(rowToIncident));
     }
-    setLoading(false);
+    store.setLoading(false);
   }, []);
 
-  // Realtime subscription
   useEffect(() => {
     fetchIncidents();
 
@@ -115,13 +130,11 @@ export function useIncidents() {
         { event: "*", schema: "public", table: "incidents" },
         (payload) => {
           if (payload.eventType === "INSERT") {
-            setIncidents((prev) => [rowToIncident(payload.new), ...prev]);
+            store.addIncident(rowToIncident(payload.new));
           } else if (payload.eventType === "UPDATE") {
-            setIncidents((prev) =>
-              prev.map((inc) => (inc.id === (payload.new as any).id ? rowToIncident(payload.new) : inc))
-            );
+            store.updateIncidentInStore((payload.new as any).id, rowToIncident(payload.new));
           } else if (payload.eventType === "DELETE") {
-            setIncidents((prev) => prev.filter((inc) => inc.id !== (payload.old as any).id));
+            store.removeIncident((payload.old as any).id);
           }
         }
       )
@@ -132,54 +145,39 @@ export function useIncidents() {
     };
   }, [fetchIncidents]);
 
-  // Create
   const createIncident = useCallback(
     async (inc: Partial<Incident>) => {
-      if (!user) {
-        toast.error("Необхідна авторизація");
-        return null;
-      }
+      if (!user) { toast.error("Необхідна авторизація"); return null; }
       const validationError = validateIncident(inc);
-      if (validationError) {
-        toast.error(validationError);
-        return null;
-      }
+      if (validationError) { toast.error(validationError); return null; }
       const row = incidentToRow(inc, user.id);
       const { data, error } = await supabase
         .from("incidents")
         .insert(row as any)
         .select()
         .single();
-
-      if (error) {
-        console.error("Error creating incident:", error);
-        toast.error("Помилка створення інциденту");
-        return null;
-      }
+      if (error) { console.error(error); toast.error("Помилка створення"); return null; }
+      await logAudit(user.id, data.id, "create", { title: inc.title, type: inc.type, severity: inc.severity });
       toast.success("Інцидент створено");
       return rowToIncident(data);
     },
     [user]
   );
 
-  // Update
   const updateIncident = useCallback(
     async (id: string, updates: Partial<Incident>) => {
-      if (!user) {
-        toast.error("Необхідна авторизація");
-        return false;
-      }
+      if (!user) { toast.error("Необхідна авторизація"); return false; }
       const validationError = validateIncident({ title: "placeholder", ...updates });
-      if (validationError) {
-        toast.error(validationError);
-        return false;
-      }
+      if (validationError) { toast.error(validationError); return false; }
+
       const partial: Record<string, any> = {};
       if (updates.title !== undefined) partial.title = updates.title;
       if (updates.type !== undefined) partial.type = updates.type;
+      if (updates.category !== undefined) partial.category = updates.category;
       if (updates.status !== undefined) partial.status = updates.status;
       if (updates.severity !== undefined) partial.severity = updates.severity;
       if (updates.description !== undefined) partial.description = updates.description;
+      if (updates.address !== undefined) partial.address = updates.address;
       if (updates.lead_agency !== undefined) {
         partial.lead_agency = updates.lead_agency;
         partial.service = updates.lead_agency;
@@ -198,6 +196,9 @@ export function useIncidents() {
         partial.police_units = updates.resources.police_units;
         partial.medical_units = updates.resources.medical_units;
         partial.personnel_total = updates.resources.personnel_total;
+        if (updates.resources.specialized_equipment) {
+          partial.specialized_equipment = updates.resources.specialized_equipment;
+        }
       }
       if (updates.impact) {
         partial.rescued = updates.impact.rescued;
@@ -211,35 +212,43 @@ export function useIncidents() {
         partial.estimated_resolution_time = updates.estimated_resolution_time;
 
       const { error } = await supabase.from("incidents").update(partial).eq("id", id);
-      if (error) {
-        console.error("Error updating incident:", error);
-        toast.error("Помилка оновлення інциденту");
-        return false;
-      }
+      if (error) { console.error(error); toast.error("Помилка оновлення"); return false; }
+      await logAudit(user.id, id, "update", partial);
       toast.success("Інцидент оновлено");
       return true;
     },
     [user]
   );
 
-  // Delete
   const deleteIncident = useCallback(
     async (id: string) => {
-      if (!user) {
-        toast.error("Необхідна авторизація");
-        return false;
-      }
+      if (!user) { toast.error("Необхідна авторизація"); return false; }
       const { error } = await supabase.from("incidents").delete().eq("id", id);
-      if (error) {
-        console.error("Error deleting incident:", error);
-        toast.error("Помилка видалення інциденту");
-        return false;
-      }
+      if (error) { console.error(error); toast.error("Помилка видалення"); return false; }
+      await logAudit(user.id, id, "delete", {});
       toast.success("Інцидент видалено");
       return true;
     },
     [user]
   );
 
-  return { incidents, loading, createIncident, updateIncident, deleteIncident, refetch: fetchIncidents };
+  const getAuditLog = useCallback(async (incidentId: string) => {
+    const { data } = await supabase
+      .from("incident_audit_log" as any)
+      .select("*")
+      .eq("incident_id", incidentId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    return (data as any[]) ?? [];
+  }, []);
+
+  return {
+    incidents: store.incidents,
+    loading: store.loading,
+    createIncident,
+    updateIncident,
+    deleteIncident,
+    refetch: fetchIncidents,
+    getAuditLog,
+  };
 }

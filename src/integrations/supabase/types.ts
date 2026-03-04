@@ -95,8 +95,37 @@ export type Database = {
         }
         Relationships: []
       }
+      incident_audit_log: {
+        Row: {
+          action: string
+          changes: Json | null
+          created_at: string
+          id: string
+          incident_id: string
+          user_id: string
+        }
+        Insert: {
+          action?: string
+          changes?: Json | null
+          created_at?: string
+          id?: string
+          incident_id: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          changes?: Json | null
+          created_at?: string
+          id?: string
+          incident_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       incidents: {
         Row: {
+          address: string | null
+          category: string | null
           coordinates_lat: number | null
           coordinates_lng: number | null
           created_at: string
@@ -119,6 +148,7 @@ export type Database = {
           service: string | null
           ses_units: number | null
           severity: string | null
+          specialized_equipment: string[] | null
           status: string
           time: string
           title: string | null
@@ -127,6 +157,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          address?: string | null
+          category?: string | null
           coordinates_lat?: number | null
           coordinates_lng?: number | null
           created_at?: string
@@ -149,6 +181,7 @@ export type Database = {
           service?: string | null
           ses_units?: number | null
           severity?: string | null
+          specialized_equipment?: string[] | null
           status?: string
           time?: string
           title?: string | null
@@ -157,6 +190,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          address?: string | null
+          category?: string | null
           coordinates_lat?: number | null
           coordinates_lng?: number | null
           created_at?: string
@@ -179,6 +214,7 @@ export type Database = {
           service?: string | null
           ses_units?: number | null
           severity?: string | null
+          specialized_equipment?: string[] | null
           status?: string
           time?: string
           title?: string | null
