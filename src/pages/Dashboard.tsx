@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { startOfDay, subDays, getMonth, getDay, isToday, format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,153 +6,231 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useCalendarEvents, CalendarEvent } from "@/hooks/useCalendarEvents";
+import { useIncidents } from "@/hooks/useIncidents";
+import { useIncidentStore } from "@/stores/useIncidentStore";
+import { REGION_NAME_MAP } from "@/components/UkraineMap";
+import {
+  SEVERITY_CONFIG, STATUS_CONFIG, INCIDENT_TYPE_LABELS, CATEGORY_LABELS,
+  type Incident, type SeverityLevel,
+} from "@/data/mockIncidents";
 import {
   Shield, Users, FileText, AlertTriangle, TrendingUp,
   BarChart3, Activity, Pencil, Plus, Trash2, Loader2,
-  Flame, Phone, ShieldCheck
+  Flame, Phone, ShieldCheck, ArrowRightLeft, MapPin, Zap,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell
 } from "recharts";
 
-const CHART_COLORS = ["hsl(24, 95%, 53%)", "hsl(24, 80%, 65%)", "hsl(30, 100%, 75%)", "hsl(30, 40%, 85%)"];
-
-interface IncidentRow {
-  id: string; user_id: string; type: string; location: string; time: string; status: string; created_at: string; updated_at: string;
-}
-interface PersonnelRow {
-  id: string; user_id: string; name: string; rank: string; department: string; status: string; created_at: string; updated_at: string;
-}
-
-const iconMap: Record<string, React.ComponentType<{ className?: string }>> = { FileText, Users, AlertTriangle, TrendingUp };
+const CHART_COLORS = ["hsl(24, 95%, 53%)", "hsl(24, 80%, 65%)", "hsl(30, 100%, 75%)", "hsl(30, 40%, 85%)", "hsl(200, 70%, 50%)", "hsl(150, 60%, 45%)"];
 const MONTH_NAMES = ["Січ", "Лют", "Бер", "Кві", "Тра", "Чер", "Лип", "Сер", "Вер", "Жов", "Лис", "Гру"];
 const DAY_NAMES = ["Нд", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
 
-const computeStats = (events: IncidentRow[], personnel: PersonnelRow[]) => {
-  const active = events.filter(e => e.status !== "Завершено").length;
-  const todayCount = events.filter(e => isToday(new Date(e.created_at))).length;
-  const resolved = events.filter(e => e.status === "Завершено").length;
-  const rate = events.length > 0 ? Math.round((resolved / events.length) * 100) : 0;
-  return [
-    { title: "Активні справи", value: String(active), icon: "FileText", change: `${events.length} всього` },
-    { title: "Співробітники", value: String(personnel.length), icon: "Users", change: `${personnel.filter(p => p.status === "На службі").length} на службі` },
-    { title: "Інциденти сьогодні", value: String(todayCount), icon: "AlertTriangle", change: `${resolved} вирішено` },
-    { title: "Показник розкриття", value: `${rate}%`, icon: "TrendingUp", change: `${resolved}/${events.length}` },
-  ];
+const REGION_IDS = Object.keys(REGION_NAME_MAP);
+
+// ═══ RESOURCE THRESHOLDS (min resources per active incident by severity) ═══
+const SEVERITY_RESOURCE_NORM: Record<string, { personnel: number; units: number }> = {
+  Critical: { personnel: 30, units: 8 },
+  High: { personnel: 15, units: 5 },
+  Major: { personnel: 8, units: 3 },
+  Medium: { personnel: 4, units: 2 },
+  Minor: { personnel: 2, units: 1 },
+  Low: { personnel: 1, units: 1 },
 };
 
-const computeMonthlyData = (events: IncidentRow[]) => {
-  const counts: Record<number, number> = {};
-  events.forEach(e => { const m = getMonth(new Date(e.created_at)); counts[m] = (counts[m] || 0) + 1; });
-  return MONTH_NAMES.map((name, i) => ({ name, value: counts[i] || 0 }));
-};
+interface RegionDeficit {
+  regionId: string;
+  regionName: string;
+  activeCount: number;
+  criticalCount: number;
+  currentPersonnel: number;
+  requiredPersonnel: number;
+  currentUnits: number;
+  requiredUnits: number;
+  deficitPersonnel: number;
+  deficitUnits: number;
+  deficitPercent: number;
+  surplus: boolean;
+}
 
-const computeWeeklyTrend = (events: IncidentRow[]) => {
-  const now = new Date();
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = subDays(startOfDay(now), 6 - i);
-    const dayEvents = events.filter(e => startOfDay(new Date(e.created_at)).getTime() === d.getTime());
-    return { name: DAY_NAMES[getDay(d)], incidents: dayEvents.length, resolved: dayEvents.filter(e => e.status === "Завершено").length };
+interface Recommendation {
+  from: string;
+  fromName: string;
+  to: string;
+  toName: string;
+  personnel: number;
+  units: number;
+  reason: string;
+}
+
+function computeRegionDeficits(incidents: Incident[]): RegionDeficit[] {
+  const active = incidents.filter(i => i.status !== "Resolved");
+  const byRegion: Record<string, Incident[]> = {};
+  active.forEach(i => {
+    if (!byRegion[i.region]) byRegion[i.region] = [];
+    byRegion[i.region].push(i);
   });
-};
 
-const computeCategoryData = (events: IncidentRow[]) => {
-  const counts: Record<string, number> = {};
-  events.forEach(e => { const t = e.type || "Інше"; counts[t] = (counts[t] || 0) + 1; });
-  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  return entries.length === 0 ? [{ name: "Немає даних", value: 1 }] : entries.map(([name, value]) => ({ name, value }));
-};
+  return REGION_IDS.map(id => {
+    const regionIncs = byRegion[id] || [];
+    const currentPersonnel = regionIncs.reduce((s, i) => s + i.resources.personnel_total, 0);
+    const currentUnits = regionIncs.reduce((s, i) => s + i.resources.ses_units + i.resources.police_units + i.resources.medical_units, 0);
+    const requiredPersonnel = regionIncs.reduce((s, i) => s + (SEVERITY_RESOURCE_NORM[i.severity]?.personnel ?? 4), 0);
+    const requiredUnits = regionIncs.reduce((s, i) => s + (SEVERITY_RESOURCE_NORM[i.severity]?.units ?? 2), 0);
+    const deficitPersonnel = requiredPersonnel - currentPersonnel;
+    const deficitUnits = requiredUnits - currentUnits;
+    const deficitPercent = requiredPersonnel > 0 ? Math.round(((requiredPersonnel - currentPersonnel) / requiredPersonnel) * 100) : 0;
 
-// Service widget stats from calendar events
-const computeServiceStats = (calEvents: CalendarEvent[]) => {
-  const today = format(new Date(), "yyyy-MM-dd");
-  const todayEvents = calEvents.filter(e => e.event_date === today);
+    return {
+      regionId: id,
+      regionName: REGION_NAME_MAP[id] || id,
+      activeCount: regionIncs.length,
+      criticalCount: regionIncs.filter(i => i.severity === "Critical").length,
+      currentPersonnel,
+      requiredPersonnel,
+      currentUnits,
+      requiredUnits,
+      deficitPersonnel: Math.max(0, deficitPersonnel),
+      deficitUnits: Math.max(0, deficitUnits),
+      deficitPercent,
+      surplus: deficitPersonnel < 0,
+    };
+  }).filter(r => r.activeCount > 0);
+}
 
-  return {
-    ses: {
-      rescued: todayEvents.reduce((s, e) => s + (e.service_ses ? (e.ses_people_rescued || 0) : 0), 0),
-      fires: todayEvents.reduce((s, e) => s + (e.service_ses ? (e.ses_fires_extinguished || 0) : 0), 0),
-      equipment: todayEvents.filter(e => e.service_ses && e.ses_equipment_used).length,
-    },
-    police: {
-      calls: todayEvents.reduce((s, e) => s + (e.service_police ? (e.police_calls || 0) : 0), 0),
-      arrests: todayEvents.reduce((s, e) => s + (e.service_police ? (e.police_arrests || 0) : 0), 0),
-      patrols: todayEvents.reduce((s, e) => s + (e.service_police ? (e.police_patrols_deployed || 0) : 0), 0),
-    },
-    ng: {
-      personnel: todayEvents.reduce((s, e) => s + (e.service_national_guard ? (e.ng_personnel_deployed || 0) : 0), 0),
-      operations: todayEvents.reduce((s, e) => s + (e.service_national_guard ? (e.ng_operations_conducted || 0) : 0), 0),
-      equipment: todayEvents.reduce((s, e) => s + (e.service_national_guard ? (e.ng_equipment_units || 0) : 0), 0),
-    },
-  };
-};
+function computeRecommendations(deficits: RegionDeficit[]): Recommendation[] {
+  const needHelp = deficits.filter(d => d.deficitPersonnel > 0).sort((a, b) => b.deficitPercent - a.deficitPercent);
+  const canHelp = deficits.filter(d => d.surplus).sort((a, b) => a.deficitPercent - b.deficitPercent); // most surplus first
+
+  const recs: Recommendation[] = [];
+  for (const need of needHelp) {
+    for (const donor of canHelp) {
+      if (recs.length >= 5) break;
+      const surplusP = donor.currentPersonnel - donor.requiredPersonnel;
+      const surplusU = donor.currentUnits - donor.requiredUnits;
+      if (surplusP <= 0) continue;
+      const transferP = Math.min(surplusP, need.deficitPersonnel);
+      const transferU = Math.min(Math.max(0, surplusU), need.deficitUnits);
+      if (transferP > 0) {
+        recs.push({
+          from: donor.regionId,
+          fromName: donor.regionName,
+          to: need.regionId,
+          toName: need.regionName,
+          personnel: transferP,
+          units: transferU,
+          reason: need.criticalCount > 0 ? `${need.criticalCount} критичних подій` : `${need.activeCount} активних подій`,
+        });
+      }
+    }
+  }
+  return recs;
+}
 
 const Dashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [events, setEvents] = useState<IncidentRow[]>([]);
-  const [personnel, setPersonnel] = useState<PersonnelRow[]>([]);
-  const { events: calEvents } = useCalendarEvents();
-  const [loadingEvents, setLoadingEvents] = useState(true);
+  
+  // ═══ USE ZUSTAND STORE — SINGLE SOURCE OF TRUTH ═══
+  const { incidents, loading: incidentsLoading } = useIncidentStore();
+  useIncidents(); // triggers fetch + realtime subscription
+
+  // Personnel (still separate table)
+  const [personnel, setPersonnel] = useState<any[]>([]);
   const [loadingPersonnel, setLoadingPersonnel] = useState(true);
 
-  const stats = useMemo(() => computeStats(events, personnel), [events, personnel]);
-  const monthlyData = useMemo(() => computeMonthlyData(events), [events]);
-  const trendData = useMemo(() => computeWeeklyTrend(events), [events]);
-  const categoryData = useMemo(() => computeCategoryData(events), [events]);
-  const serviceStats = useMemo(() => computeServiceStats(calEvents), [calEvents]);
+  useState(() => {
+    supabase.from("personnel").select("*").order("created_at", { ascending: false })
+      .then(({ data }) => { setPersonnel(data || []); setLoadingPersonnel(false); });
+  });
 
-  const [editingEvent, setEditingEvent] = useState<Partial<IncidentRow> | null>(null);
-  const [eventDialogOpen, setEventDialogOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [editingPerson, setEditingPerson] = useState<Partial<PersonnelRow> | null>(null);
+  // ═══ COMPUTE ALL STATS FROM ZUSTAND INCIDENTS ═══
+  const stats = useMemo(() => {
+    const active = incidents.filter(i => i.status !== "Resolved").length;
+    const todayCount = incidents.filter(i => isToday(new Date(i.timestamp))).length;
+    const resolved = incidents.filter(i => i.status === "Resolved").length;
+    const rate = incidents.length > 0 ? Math.round((resolved / incidents.length) * 100) : 0;
+    return [
+      { title: "Активні інциденти", value: String(active), icon: "AlertTriangle", change: `${incidents.length} всього`, color: "text-red-500" },
+      { title: "Персонал задіяно", value: String(incidents.reduce((s, i) => s + i.resources.personnel_total, 0)), icon: "Users", change: `${personnel.filter((p: any) => p.status === "На службі").length} на службі`, color: "text-blue-500" },
+      { title: "Врятовано сьогодні", value: String(incidents.filter(i => isToday(new Date(i.timestamp))).reduce((s, i) => s + i.impact.rescued, 0)), icon: "TrendingUp", change: `${todayCount} подій за добу`, color: "text-green-500" },
+      { title: "Показник вирішення", value: `${rate}%`, icon: "FileText", change: `${resolved}/${incidents.length}`, color: "text-primary" },
+    ];
+  }, [incidents, personnel]);
+
+  // Service stats from incidents (not calendar events)
+  const serviceStats = useMemo(() => {
+    const active = incidents.filter(i => i.status !== "Resolved");
+    return {
+      ses: {
+        units: active.reduce((s, i) => s + i.resources.ses_units, 0),
+        rescued: active.reduce((s, i) => s + i.impact.rescued, 0),
+        personnel: active.filter(i => i.category === "SES" || i.resources.ses_units > 0).reduce((s, i) => s + i.resources.personnel_total, 0),
+      },
+      police: {
+        units: active.reduce((s, i) => s + i.resources.police_units, 0),
+        incidents: active.filter(i => i.category === "Police" || i.resources.police_units > 0).length,
+        personnel: active.filter(i => i.category === "Police" || i.resources.police_units > 0).reduce((s, i) => s + i.resources.personnel_total, 0),
+      },
+      medical: {
+        units: active.reduce((s, i) => s + i.resources.medical_units, 0),
+        injured: active.reduce((s, i) => s + i.impact.injured, 0),
+        personnel: active.filter(i => i.category === "Medical" || i.resources.medical_units > 0).reduce((s, i) => s + i.resources.personnel_total, 0),
+      },
+    };
+  }, [incidents]);
+
+  // Monthly & weekly charts
+  const monthlyData = useMemo(() => {
+    const counts: Record<number, number> = {};
+    incidents.forEach(i => { const m = getMonth(new Date(i.timestamp)); counts[m] = (counts[m] || 0) + 1; });
+    return MONTH_NAMES.map((name, idx) => ({ name, value: counts[idx] || 0 }));
+  }, [incidents]);
+
+  const trendData = useMemo(() => {
+    const now = new Date();
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = subDays(startOfDay(now), 6 - i);
+      const dayIncs = incidents.filter(inc => startOfDay(new Date(inc.timestamp)).getTime() === d.getTime());
+      return { name: DAY_NAMES[getDay(d)], incidents: dayIncs.length, resolved: dayIncs.filter(inc => inc.status === "Resolved").length };
+    });
+  }, [incidents]);
+
+  const categoryData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    incidents.forEach(i => { const t = INCIDENT_TYPE_LABELS[i.type] || i.type; counts[t] = (counts[t] || 0) + 1; });
+    const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    return entries.length === 0 ? [{ name: "Немає даних", value: 1 }] : entries.map(([name, value]) => ({ name, value }));
+  }, [incidents]);
+
+  const severityData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    incidents.forEach(i => { const s = SEVERITY_CONFIG[i.severity]?.label || i.severity; counts[s] = (counts[s] || 0) + 1; });
+    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+  }, [incidents]);
+
+  // ═══ RESOURCE DEFICIT ANALYSIS ═══
+  const regionDeficits = useMemo(() => computeRegionDeficits(incidents), [incidents]);
+  const recommendations = useMemo(() => computeRecommendations(regionDeficits), [regionDeficits]);
+  const criticalDeficits = useMemo(() => regionDeficits.filter(d => d.deficitPercent > 30), [regionDeficits]);
+
+  // Personnel CRUD
+  const [editingPerson, setEditingPerson] = useState<any>(null);
   const [personDialogOpen, setPersonDialogOpen] = useState(false);
-
-  const fetchEvents = async () => {
-    const { data, error } = await supabase.from("incidents" as any).select("*").order("created_at", { ascending: false });
-    if (error) toast({ title: "Помилка", description: error.message, variant: "destructive" });
-    else setEvents((data as unknown as IncidentRow[]) || []);
-    setLoadingEvents(false);
-  };
+  const [saving, setSaving] = useState(false);
 
   const fetchPersonnel = async () => {
-    const { data, error } = await supabase.from("personnel" as any).select("*").order("created_at", { ascending: false });
-    if (error) toast({ title: "Помилка", description: error.message, variant: "destructive" });
-    else setPersonnel((data as unknown as PersonnelRow[]) || []);
-    setLoadingPersonnel(false);
+    const { data } = await supabase.from("personnel").select("*").order("created_at", { ascending: false });
+    setPersonnel(data || []);
   };
 
-  useEffect(() => { fetchEvents(); fetchPersonnel(); }, []);
-
-  const openEventDialog = (event?: IncidentRow) => {
-    setEditingEvent(event || { type: "", location: "", time: "", status: "В роботі" });
-    setEventDialogOpen(true);
-  };
-
-  const saveEvent = async () => {
-    if (!editingEvent || !user) return;
-    setSaving(true);
-    if (editingEvent.id) {
-      await supabase.from("incidents" as any).update({ type: editingEvent.type, location: editingEvent.location, time: editingEvent.time, status: editingEvent.status } as any).eq("id", editingEvent.id);
-    } else {
-      await supabase.from("incidents" as any).insert({ user_id: user.id, type: editingEvent.type, location: editingEvent.location, time: editingEvent.time, status: editingEvent.status } as any);
-    }
-    setSaving(false);
-    setEventDialogOpen(false);
-    fetchEvents();
-  };
-
-  const deleteEvent = async (id: string) => {
-    await supabase.from("incidents" as any).delete().eq("id", id);
-    fetchEvents();
-  };
-
-  const openPersonDialog = (person?: PersonnelRow) => {
+  const openPersonDialog = (person?: any) => {
     setEditingPerson(person || { name: "", rank: "", department: "", status: "На службі" });
     setPersonDialogOpen(true);
   };
@@ -161,9 +239,9 @@ const Dashboard = () => {
     if (!editingPerson || !user) return;
     setSaving(true);
     if (editingPerson.id) {
-      await supabase.from("personnel" as any).update({ name: editingPerson.name, rank: editingPerson.rank, department: editingPerson.department, status: editingPerson.status } as any).eq("id", editingPerson.id);
+      await supabase.from("personnel").update({ name: editingPerson.name, rank: editingPerson.rank, department: editingPerson.department, status: editingPerson.status } as any).eq("id", editingPerson.id);
     } else {
-      await supabase.from("personnel" as any).insert({ user_id: user.id, name: editingPerson.name, rank: editingPerson.rank, department: editingPerson.department, status: editingPerson.status } as any);
+      await supabase.from("personnel").insert({ user_id: user.id, name: editingPerson.name, rank: editingPerson.rank, department: editingPerson.department, status: editingPerson.status } as any);
     }
     setSaving(false);
     setPersonDialogOpen(false);
@@ -171,26 +249,28 @@ const Dashboard = () => {
   };
 
   const deletePerson = async (id: string) => {
-    await supabase.from("personnel" as any).delete().eq("id", id);
+    await supabase.from("personnel").delete().eq("id", id);
     fetchPersonnel();
   };
 
+  const iconMap: Record<string, React.ComponentType<{ className?: string }>> = { FileText, Users, AlertTriangle, TrendingUp };
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Service Widgets */}
+      {/* ═══ SERVICE WIDGETS (from incidents, not calendar) ═══ */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="border-l-4 border-l-red-500">
           <CardContent className="p-5">
             <div className="flex items-center gap-3 mb-3">
-              <div className="h-10 w-10 rounded-lg bg-red-100 flex items-center justify-center">
-                <Flame className="h-5 w-5 text-red-600" />
+              <div className="h-10 w-10 rounded-lg bg-red-500/10 flex items-center justify-center">
+                <Flame className="h-5 w-5 text-red-500" />
               </div>
-              <h3 className="font-bold text-sm" style={{ fontFamily: "Montserrat" }}>ДСНС</h3>
+              <h3 className="font-bold text-sm">ДСНС</h3>
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
+              <div><p className="text-xl font-bold text-foreground">{serviceStats.ses.units}</p><p className="text-xs text-muted-foreground">Підрозділів</p></div>
               <div><p className="text-xl font-bold text-foreground">{serviceStats.ses.rescued}</p><p className="text-xs text-muted-foreground">Врятовано</p></div>
-              <div><p className="text-xl font-bold text-foreground">{serviceStats.ses.fires}</p><p className="text-xs text-muted-foreground">Пожеж</p></div>
-              <div><p className="text-xl font-bold text-foreground">{serviceStats.ses.equipment}</p><p className="text-xs text-muted-foreground">Техніки</p></div>
+              <div><p className="text-xl font-bold text-foreground">{serviceStats.ses.personnel}</p><p className="text-xs text-muted-foreground">Персоналу</p></div>
             </div>
           </CardContent>
         </Card>
@@ -198,15 +278,15 @@ const Dashboard = () => {
         <Card className="border-l-4 border-l-blue-500">
           <CardContent className="p-5">
             <div className="flex items-center gap-3 mb-3">
-              <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                <Phone className="h-5 w-5 text-blue-600" />
+              <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                <Phone className="h-5 w-5 text-blue-500" />
               </div>
-              <h3 className="font-bold text-sm" style={{ fontFamily: "Montserrat" }}>Поліція</h3>
+              <h3 className="font-bold text-sm">Поліція</h3>
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
-              <div><p className="text-xl font-bold text-foreground">{serviceStats.police.calls}</p><p className="text-xs text-muted-foreground">Виклики</p></div>
-              <div><p className="text-xl font-bold text-foreground">{serviceStats.police.arrests}</p><p className="text-xs text-muted-foreground">Затримання</p></div>
-              <div><p className="text-xl font-bold text-foreground">{serviceStats.police.patrols}</p><p className="text-xs text-muted-foreground">Патрулі</p></div>
+              <div><p className="text-xl font-bold text-foreground">{serviceStats.police.units}</p><p className="text-xs text-muted-foreground">Підрозділів</p></div>
+              <div><p className="text-xl font-bold text-foreground">{serviceStats.police.incidents}</p><p className="text-xs text-muted-foreground">Інцидентів</p></div>
+              <div><p className="text-xl font-bold text-foreground">{serviceStats.police.personnel}</p><p className="text-xs text-muted-foreground">Персоналу</p></div>
             </div>
           </CardContent>
         </Card>
@@ -214,21 +294,21 @@ const Dashboard = () => {
         <Card className="border-l-4 border-l-green-500">
           <CardContent className="p-5">
             <div className="flex items-center gap-3 mb-3">
-              <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center">
-                <ShieldCheck className="h-5 w-5 text-green-600" />
+              <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center">
+                <ShieldCheck className="h-5 w-5 text-green-500" />
               </div>
-              <h3 className="font-bold text-sm" style={{ fontFamily: "Montserrat" }}>Нацгвардія</h3>
+              <h3 className="font-bold text-sm">Медична служба</h3>
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
-              <div><p className="text-xl font-bold text-foreground">{serviceStats.ng.personnel}</p><p className="text-xs text-muted-foreground">Персонал</p></div>
-              <div><p className="text-xl font-bold text-foreground">{serviceStats.ng.operations}</p><p className="text-xs text-muted-foreground">Операцій</p></div>
-              <div><p className="text-xl font-bold text-foreground">{serviceStats.ng.equipment}</p><p className="text-xs text-muted-foreground">Техніки</p></div>
+              <div><p className="text-xl font-bold text-foreground">{serviceStats.medical.units}</p><p className="text-xs text-muted-foreground">Бригад</p></div>
+              <div><p className="text-xl font-bold text-foreground">{serviceStats.medical.injured}</p><p className="text-xs text-muted-foreground">Постраждалих</p></div>
+              <div><p className="text-xl font-bold text-foreground">{serviceStats.medical.personnel}</p><p className="text-xs text-muted-foreground">Персоналу</p></div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* General Stats */}
+      {/* ═══ GENERAL STATS ═══ */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, i) => {
           const Icon = iconMap[stat.icon] || FileText;
@@ -251,20 +331,48 @@ const Dashboard = () => {
         })}
       </div>
 
-      {/* Tabs */}
+      {/* ═══ RESOURCE DEFICIT ALERT ═══ */}
+      {criticalDeficits.length > 0 && (
+        <Card className="border-destructive/50 bg-destructive/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2 text-destructive">
+              <Zap className="h-5 w-5" />
+              Дефіцит ресурсів — {criticalDeficits.length} регіон(ів)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {criticalDeficits.slice(0, 4).map(d => (
+              <div key={d.regionId} className="flex items-center gap-3">
+                <MapPin className="h-4 w-4 text-destructive shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium">{d.regionName}</span>
+                    <span className="text-xs text-destructive font-medium">−{d.deficitPersonnel} ос. / −{d.deficitUnits} підр.</span>
+                  </div>
+                  <Progress value={Math.max(0, 100 - d.deficitPercent)} className="h-1.5" />
+                </div>
+                <Badge variant="destructive" className="text-[10px] shrink-0">{d.deficitPercent}%</Badge>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ═══ TABS ═══ */}
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 h-11">
+        <TabsList className="grid w-full grid-cols-5 h-11">
           <TabsTrigger value="overview" className="gap-2"><BarChart3 className="h-4 w-4" />Огляд</TabsTrigger>
-          <TabsTrigger value="events" className="gap-2"><AlertTriangle className="h-4 w-4" />Інциденти</TabsTrigger>
+          <TabsTrigger value="resources" className="gap-2"><ArrowRightLeft className="h-4 w-4" />Ресурси</TabsTrigger>
+          <TabsTrigger value="incidents" className="gap-2"><AlertTriangle className="h-4 w-4" />Інциденти</TabsTrigger>
           <TabsTrigger value="personnel" className="gap-2"><Users className="h-4 w-4" />Персонал</TabsTrigger>
           <TabsTrigger value="analytics" className="gap-2"><Activity className="h-4 w-4" />Аналітика</TabsTrigger>
         </TabsList>
 
-        {/* Overview */}
+        {/* ═══ OVERVIEW ═══ */}
         <TabsContent value="overview" className="space-y-6 mt-4">
           <div className="grid lg:grid-cols-2 gap-6">
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><BarChart3 className="h-5 w-5 text-primary" />Звернення за місяцями</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><BarChart3 className="h-5 w-5 text-primary" />Інциденти за місяцями</CardTitle></CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={260}>
                   <BarChart data={monthlyData}>
@@ -289,76 +397,96 @@ const Dashboard = () => {
               </CardContent>
             </Card>
           </div>
+
+          {/* Latest incidents from store */}
           <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">Останні 3 інциденти</CardTitle></CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-base">Останні інциденти</CardTitle></CardHeader>
             <CardContent>
-              {loadingEvents ? (
+              {incidentsLoading ? (
                 <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
-              ) : events.length === 0 ? (
+              ) : incidents.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">Немає інцидентів</p>
               ) : (
                 <div className="space-y-2">
-                  {events.slice(0, 3).map(ev => (
-                    <div key={ev.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                      <div>
-                        <span className="font-medium text-sm">{ev.type}</span>
-                        <span className="text-muted-foreground text-sm ml-3">{ev.location}</span>
+                  {incidents.slice(0, 5).map(inc => {
+                    const sev = SEVERITY_CONFIG[inc.severity];
+                    const sta = STATUS_CONFIG[inc.status];
+                    return (
+                      <div key={inc.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className={`h-2 w-2 rounded-full shrink-0 ${sev?.color?.replace("text-", "bg-") || "bg-muted-foreground"}`} />
+                          <div className="min-w-0">
+                            <span className="font-medium text-sm block truncate">{inc.title}</span>
+                            <span className="text-muted-foreground text-xs">{inc.regionName} • {INCIDENT_TYPE_LABELS[inc.type]}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs text-muted-foreground">{inc.resources.personnel_total} ос.</span>
+                          <Badge variant="outline" className="text-[10px]">{sta?.label || inc.status}</Badge>
+                        </div>
                       </div>
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                        ev.status === "Завершено" ? "bg-green-100 text-green-700" :
-                        ev.status === "В роботі" ? "bg-accent text-accent-foreground" :
-                        "bg-secondary text-secondary-foreground"
-                      }`}>{ev.status}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Events */}
-        <TabsContent value="events" className="mt-4">
+        {/* ═══ RESOURCES TAB — DEFICIT ANALYSIS ═══ */}
+        <TabsContent value="resources" className="space-y-6 mt-4">
+          {/* Region table */}
           <Card>
-            <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Журнал інцидентів</CardTitle>
-              <Button size="sm" onClick={() => openEventDialog()} className="gap-1"><Plus className="h-4 w-4" />Додати</Button>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <MapPin className="h-5 w-5 text-primary" />
+                Аналіз ресурсів по регіонам
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              {loadingEvents ? (
-                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-              ) : events.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">Немає інцидентів.</p>
+              {regionDeficits.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Немає активних інцидентів</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border">
-                        <th className="text-left py-2 text-muted-foreground font-medium">Тип</th>
-                        <th className="text-left py-2 text-muted-foreground font-medium">Місцезнаходження</th>
-                        <th className="text-left py-2 text-muted-foreground font-medium">Час</th>
-                        <th className="text-left py-2 text-muted-foreground font-medium">Статус</th>
-                        <th className="text-right py-2 text-muted-foreground font-medium">Дії</th>
+                        <th className="text-left py-2 text-muted-foreground font-medium">Регіон</th>
+                        <th className="text-center py-2 text-muted-foreground font-medium">Активних</th>
+                        <th className="text-center py-2 text-muted-foreground font-medium">Крит.</th>
+                        <th className="text-center py-2 text-muted-foreground font-medium">Персонал</th>
+                        <th className="text-center py-2 text-muted-foreground font-medium">Підрозділів</th>
+                        <th className="text-center py-2 text-muted-foreground font-medium">Статус</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {events.map(event => (
-                        <tr key={event.id} className="border-b border-border/50 hover:bg-muted/50">
-                          <td className="py-2.5 font-medium">{event.type}</td>
-                          <td className="py-2.5 text-muted-foreground">{event.location}</td>
-                          <td className="py-2.5 text-muted-foreground">{event.time}</td>
-                          <td className="py-2.5">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                              event.status === "Завершено" ? "bg-green-100 text-green-700" :
-                              event.status === "В роботі" ? "bg-accent text-accent-foreground" :
-                              "bg-secondary text-secondary-foreground"
-                            }`}>{event.status}</span>
+                      {regionDeficits.sort((a, b) => b.deficitPercent - a.deficitPercent).map(d => (
+                        <tr key={d.regionId} className="border-b border-border/50 hover:bg-muted/50">
+                          <td className="py-2.5 font-medium">{d.regionName}</td>
+                          <td className="py-2.5 text-center">{d.activeCount}</td>
+                          <td className="py-2.5 text-center">
+                            {d.criticalCount > 0 ? <Badge variant="destructive" className="text-[10px]">{d.criticalCount}</Badge> : "—"}
                           </td>
-                          <td className="py-2.5 text-right">
-                            <div className="flex gap-1 justify-end">
-                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEventDialog(event)}><Pencil className="h-3.5 w-3.5" /></Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteEvent(event.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
-                            </div>
+                          <td className="py-2.5 text-center">
+                            <span className={d.deficitPersonnel > 0 ? "text-destructive font-medium" : "text-foreground"}>
+                              {d.currentPersonnel}/{d.requiredPersonnel}
+                            </span>
+                          </td>
+                          <td className="py-2.5 text-center">
+                            <span className={d.deficitUnits > 0 ? "text-destructive font-medium" : "text-foreground"}>
+                              {d.currentUnits}/{d.requiredUnits}
+                            </span>
+                          </td>
+                          <td className="py-2.5 text-center">
+                            {d.surplus ? (
+                              <Badge className="bg-green-500/10 text-green-600 border-green-500/30 text-[10px]">Надлишок</Badge>
+                            ) : d.deficitPercent > 30 ? (
+                              <Badge variant="destructive" className="text-[10px]">Дефіцит {d.deficitPercent}%</Badge>
+                            ) : d.deficitPercent > 0 ? (
+                              <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30 text-[10px]">Частковий −{d.deficitPercent}%</Badge>
+                            ) : (
+                              <Badge className="bg-green-500/10 text-green-600 border-green-500/30 text-[10px]">Норма</Badge>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -368,9 +496,97 @@ const Dashboard = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* Redistribution recommendations */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <ArrowRightLeft className="h-5 w-5 text-primary" />
+                Рекомендації щодо перерозподілу
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {recommendations.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  {regionDeficits.length === 0 ? "Немає активних інцидентів" : "Ресурси розподілені оптимально або немає донорських регіонів"}
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {recommendations.map((rec, i) => (
+                    <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border border-border/50">
+                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <ArrowRightLeft className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm">
+                          <span className="font-medium text-green-600">{rec.fromName}</span>
+                          <span className="text-muted-foreground mx-2">→</span>
+                          <span className="font-medium text-destructive">{rec.toName}</span>
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {rec.personnel} осіб{rec.units > 0 ? `, ${rec.units} підрозділів` : ""} • {rec.reason}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        {/* Personnel */}
+        {/* ═══ INCIDENTS ═══ */}
+        <TabsContent value="incidents" className="mt-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Журнал інцидентів (з Ситуаційного центру)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {incidentsLoading ? (
+                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              ) : incidents.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Немає інцидентів</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-2 text-muted-foreground font-medium">Назва</th>
+                        <th className="text-left py-2 text-muted-foreground font-medium">Регіон</th>
+                        <th className="text-left py-2 text-muted-foreground font-medium">Тип</th>
+                        <th className="text-center py-2 text-muted-foreground font-medium">Рівень</th>
+                        <th className="text-center py-2 text-muted-foreground font-medium">Ресурси</th>
+                        <th className="text-left py-2 text-muted-foreground font-medium">Статус</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {incidents.map(inc => {
+                        const sev = SEVERITY_CONFIG[inc.severity] || { label: inc.severity, bgColor: "bg-muted" };
+                        const sta = STATUS_CONFIG[inc.status] || { label: inc.status, color: "text-muted-foreground" };
+                        return (
+                          <tr key={inc.id} className="border-b border-border/50 hover:bg-muted/50">
+                            <td className="py-2.5 font-medium max-w-[200px] truncate">{inc.title}</td>
+                            <td className="py-2.5 text-muted-foreground">{inc.regionName}</td>
+                            <td className="py-2.5 text-muted-foreground">{INCIDENT_TYPE_LABELS[inc.type]}</td>
+                            <td className="py-2.5 text-center">
+                              <Badge variant="outline" className={`text-[10px] ${sev.bgColor}`}>{sev.label}</Badge>
+                            </td>
+                            <td className="py-2.5 text-center text-muted-foreground">{inc.resources.personnel_total} ос.</td>
+                            <td className="py-2.5">
+                              <span className={`text-xs font-medium ${sta.color}`}>{sta.label}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ═══ PERSONNEL ═══ */}
         <TabsContent value="personnel" className="mt-4">
           <Card>
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
@@ -395,7 +611,7 @@ const Dashboard = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {personnel.map(person => (
+                      {personnel.map((person: any) => (
                         <tr key={person.id} className="border-b border-border/50 hover:bg-muted/50">
                           <td className="py-2.5 font-medium">{person.name}</td>
                           <td className="py-2.5 text-muted-foreground">{person.rank}</td>
@@ -421,7 +637,7 @@ const Dashboard = () => {
           </Card>
         </TabsContent>
 
-        {/* Analytics */}
+        {/* ═══ ANALYTICS ═══ */}
         <TabsContent value="analytics" className="space-y-6 mt-4">
           <div className="grid lg:grid-cols-2 gap-6">
             <Card>
@@ -438,14 +654,15 @@ const Dashboard = () => {
               </CardContent>
             </Card>
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-base">Звернення за місяцями</CardTitle></CardHeader>
-              <CardContent>
+              <CardHeader className="pb-2"><CardTitle className="text-base">За рівнем загрози</CardTitle></CardHeader>
+              <CardContent className="flex justify-center">
                 <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={monthlyData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="name" tick={{ fontSize: 12 }} /><YAxis tick={{ fontSize: 12 }} /><Tooltip />
-                    <Bar dataKey="value" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
-                  </BarChart>
+                  <PieChart>
+                    <Pie data={severityData} cx="50%" cy="50%" innerRadius={55} outerRadius={95} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                      {severityData.map((_, i) => (<Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
@@ -465,35 +682,6 @@ const Dashboard = () => {
           </Card>
         </TabsContent>
       </Tabs>
-
-      {/* Event Dialog */}
-      <Dialog open={eventDialogOpen} onOpenChange={setEventDialogOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{editingEvent?.id ? "Редагувати інцидент" : "Новий інцидент"}</DialogTitle></DialogHeader>
-          {editingEvent && (
-            <div className="space-y-4">
-              <div className="space-y-2"><label className="text-sm font-medium">Тип</label><Input value={editingEvent.type || ""} onChange={e => setEditingEvent({ ...editingEvent, type: e.target.value })} placeholder="Крадіжка, ДТП..." /></div>
-              <div className="space-y-2"><label className="text-sm font-medium">Місцезнаходження</label><Input value={editingEvent.location || ""} onChange={e => setEditingEvent({ ...editingEvent, location: e.target.value })} /></div>
-              <div className="space-y-2"><label className="text-sm font-medium">Час</label><Input value={editingEvent.time || ""} onChange={e => setEditingEvent({ ...editingEvent, time: e.target.value })} placeholder="14:30" /></div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Статус</label>
-                <Select value={editingEvent.status || "В роботі"} onValueChange={val => setEditingEvent({ ...editingEvent, status: val })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="В роботі">В роботі</SelectItem>
-                    <SelectItem value="Розслідується">Розслідується</SelectItem>
-                    <SelectItem value="Завершено">Завершено</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEventDialogOpen(false)}>Скасувати</Button>
-            <Button onClick={saveEvent} disabled={saving}>{saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Зберегти</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Personnel Dialog */}
       <Dialog open={personDialogOpen} onOpenChange={setPersonDialogOpen}>
