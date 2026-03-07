@@ -80,8 +80,8 @@ function clusterIncidents(incidents: { incident: Incident; x: number; y: number 
   return clusters;
 }
 
-const width = 800;
-const height = 520;
+const width = 900;
+const height = 600;
 
 const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, onSelectIncident, hoveredIncidentId, highlightedIncidentId }: UkraineMapProps) => {
   const [hoveredRegion, setHoveredRegion] = useState<string | null>(null);
@@ -102,7 +102,7 @@ const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, o
       .catch(() => setLoading(false));
   }, []);
 
-  const projection = useMemo(() => geoMercator().center([31.5, 48.5]).scale(3200).translate([width / 2, height / 2]), []);
+  const projection = useMemo(() => geoMercator().center([31.5, 48.8]).scale(3600).translate([width / 2, height / 2]), []);
   const pathGenerator = useMemo(() => geoPath().projection(projection), [projection]);
 
   const getRegionData = useCallback((id: string) => regions.find((r) => r.id === id), [regions]);

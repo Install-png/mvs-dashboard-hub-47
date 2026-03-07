@@ -1,10 +1,40 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import type { Incident, IncidentType, IncidentStatus, SeverityLevel, IncidentCategory } from "@/data/mockIncidents";
 import { VALID_STATUSES, VALID_SEVERITIES, VALID_TYPES } from "@/data/mockIncidents";
 import { toast } from "sonner";
 import { useIncidentStore } from "@/stores/useIncidentStore";
+import { REGION_NAME_MAP } from "@/components/UkraineMap";
+
+// ═══ CRITICAL INCIDENT NOTIFICATION SOUND ═══
+const ALERT_SOUND_URL = "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2JkZeYk4x+b2BRRDxBTF5whJCaoJ2WjH5tXU5CPDtFVWuBkZ2kpJ2ThnlnVUU5NTtKX3WIl6Kmo5yQgm9cTD44OUdYb4OUoKamoZiMfGlXRjk0OUlccoaXo6inoZiLemhVRTk0OUpec4eYpKinoZiLemhVRTk0";
+
+function playAlertSound() {
+  try {
+    const audio = new Audio(ALERT_SOUND_URL);
+    audio.volume = 0.5;
+    audio.play().catch(() => {});
+  } catch {}
+}
+
+// Resource norms for deficit check
+const SEVERITY_RESOURCE_NORM: Record<string, { personnel: number; units: number }> = {
+  Critical: { personnel: 30, units: 8 },
+  High: { personnel: 15, units: 5 },
+  Major: { personnel: 8, units: 3 },
+  Medium: { personnel: 4, units: 2 },
+  Minor: { personnel: 2, units: 1 },
+  Low: { personnel: 1, units: 1 },
+};
+
+function isRegionInDeficit(regionId: string, incidents: Incident[]): boolean {
+  const active = incidents.filter(i => i.status !== "Resolved" && i.region === regionId);
+  if (active.length === 0) return false;
+  const currentP = active.reduce((s, i) => s + i.resources.personnel_total, 0);
+  const requiredP = active.reduce((s, i) => s + (SEVERITY_RESOURCE_NORM[i.severity]?.personnel ?? 4), 0);
+  return requiredP > 0 && ((requiredP - currentP) / requiredP) > 0.3;
+}
 
 function isValidDate(v: any): boolean {
   if (!v) return false;
@@ -120,8 +150,14 @@ export function useIncidents() {
     store.setLoading(false);
   }, []);
 
+  // Track previous incidents for new-critical detection
+  const prevIncidentIdsRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
-    fetchIncidents();
+    fetchIncidents().then(() => {
+      // Initialize known IDs
+      prevIncidentIdsRef.current = new Set(store.incidents.map(i => i.id));
+    });
 
     const channel = supabase
       .channel("incidents-realtime")
@@ -130,7 +166,27 @@ export function useIncidents() {
         { event: "*", schema: "public", table: "incidents" },
         (payload) => {
           if (payload.eventType === "INSERT") {
-            store.addIncident(rowToIncident(payload.new));
+            const newInc = rowToIncident(payload.new);
+            store.addIncident(newInc);
+
+            // ═══ CRITICAL INCIDENT IN DEFICIT REGION → ALERT ═══
+            if (newInc.severity === "Critical" || newInc.severity === "High") {
+              const inDeficit = isRegionInDeficit(newInc.region, store.incidents);
+              const regionName = REGION_NAME_MAP[newInc.region] || newInc.regionName;
+              
+              if (inDeficit) {
+                playAlertSound();
+                toast.error(`⚠️ КРИТИЧНИЙ ІНЦИДЕНТ у регіоні з дефіцитом ресурсів`, {
+                  description: `${newInc.title} — ${regionName}. Необхідне термінове підкріплення!`,
+                  duration: 15000,
+                });
+              } else {
+                toast.warning(`Новий ${newInc.severity === "Critical" ? "критичний" : "важливий"} інцидент`, {
+                  description: `${newInc.title} — ${regionName}`,
+                  duration: 8000,
+                });
+              }
+            }
           } else if (payload.eventType === "UPDATE") {
             store.updateIncidentInStore((payload.new as any).id, rowToIncident(payload.new));
           } else if (payload.eventType === "DELETE") {

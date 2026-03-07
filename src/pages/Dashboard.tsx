@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -22,6 +24,7 @@ import {
   Shield, Users, FileText, AlertTriangle, TrendingUp,
   BarChart3, Activity, Pencil, Plus, Trash2, Loader2,
   Flame, Phone, ShieldCheck, ArrowRightLeft, MapPin, Zap,
+  Truck, Heart, Siren, ChevronRight, X,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -220,6 +223,102 @@ const Dashboard = () => {
   const recommendations = useMemo(() => computeRecommendations(regionDeficits), [regionDeficits]);
   const criticalDeficits = useMemo(() => regionDeficits.filter(d => d.deficitPercent > 30), [regionDeficits]);
 
+  // ═══ SERVICE DETAIL DIALOG ═══
+  type ServiceType = "ses" | "police" | "medical" | null;
+  const [activeService, setActiveService] = useState<ServiceType>(null);
+  const [serviceRegionFilter, setServiceRegionFilter] = useState<string>("all");
+
+  const serviceDetailData = useMemo(() => {
+    if (!activeService) return null;
+    const filterIncs = (incs: Incident[]) => {
+      let filtered = incs.filter(i => i.status !== "Resolved");
+      if (serviceRegionFilter !== "all") {
+        filtered = filtered.filter(i => i.region === serviceRegionFilter);
+      }
+      return filtered;
+    };
+
+    const allActive = filterIncs(incidents);
+
+    if (activeService === "ses") {
+      const sesIncs = allActive.filter(i => i.category === "SES" || i.resources.ses_units > 0);
+      return {
+        label: "ДСНС",
+        icon: Flame,
+        color: "text-red-500",
+        bgColor: "bg-red-500/10",
+        totalIncidents: sesIncs.length,
+        totalUnits: sesIncs.reduce((s, i) => s + i.resources.ses_units, 0),
+        totalPersonnel: sesIncs.reduce((s, i) => s + i.resources.personnel_total, 0),
+        totalRescued: sesIncs.reduce((s, i) => s + i.impact.rescued, 0),
+        equipment: sesIncs.flatMap(i => i.resources.specialized_equipment || []),
+        stats: [
+          { label: "Підрозділів залучено", value: sesIncs.reduce((s, i) => s + i.resources.ses_units, 0) },
+          { label: "Особовий склад", value: sesIncs.reduce((s, i) => s + i.resources.personnel_total, 0) },
+          { label: "Врятовано людей", value: sesIncs.reduce((s, i) => s + i.impact.rescued, 0) },
+          { label: "Пожеж ліквідовано", value: sesIncs.filter(i => i.type === "Fire").length },
+          { label: "Спецтехніки одиниць", value: sesIncs.reduce((s, i) => s + i.resources.ses_units, 0) },
+          { label: "Медичних випадків", value: sesIncs.reduce((s, i) => s + i.impact.injured, 0) },
+        ],
+        incidents: sesIncs,
+      };
+    }
+    if (activeService === "police") {
+      const polIncs = allActive.filter(i => i.category === "Police" || i.resources.police_units > 0);
+      return {
+        label: "Поліція",
+        icon: Phone,
+        color: "text-blue-500",
+        bgColor: "bg-blue-500/10",
+        totalIncidents: polIncs.length,
+        totalUnits: polIncs.reduce((s, i) => s + i.resources.police_units, 0),
+        totalPersonnel: polIncs.reduce((s, i) => s + i.resources.personnel_total, 0),
+        totalRescued: 0,
+        equipment: [],
+        stats: [
+          { label: "Патрулів залучено", value: polIncs.reduce((s, i) => s + i.resources.police_units, 0) },
+          { label: "Особовий склад", value: polIncs.reduce((s, i) => s + i.resources.personnel_total, 0) },
+          { label: "Інцидентів у роботі", value: polIncs.length },
+          { label: "Кримінальних подій", value: polIncs.filter(i => i.type === "Crime").length },
+          { label: "Затримань", value: polIncs.filter(i => i.type === "Crime" && i.status === "Resolved").length },
+          { label: "Критичних подій", value: polIncs.filter(i => i.severity === "Critical").length },
+        ],
+        incidents: polIncs,
+      };
+    }
+    // medical
+    const medIncs = allActive.filter(i => i.category === "Medical" || i.resources.medical_units > 0);
+    return {
+      label: "Медична служба",
+      icon: ShieldCheck,
+      color: "text-green-500",
+      bgColor: "bg-green-500/10",
+      totalIncidents: medIncs.length,
+      totalUnits: medIncs.reduce((s, i) => s + i.resources.medical_units, 0),
+      totalPersonnel: medIncs.reduce((s, i) => s + i.resources.personnel_total, 0),
+      totalRescued: medIncs.reduce((s, i) => s + i.impact.rescued, 0),
+      equipment: [],
+      stats: [
+        { label: "Бригад залучено", value: medIncs.reduce((s, i) => s + i.resources.medical_units, 0) },
+        { label: "Особовий склад", value: medIncs.reduce((s, i) => s + i.resources.personnel_total, 0) },
+        { label: "Постраждалих", value: medIncs.reduce((s, i) => s + i.impact.injured, 0) },
+        { label: "Загиблих", value: medIncs.reduce((s, i) => s + i.impact.fatalities, 0) },
+        { label: "Врятовано", value: medIncs.reduce((s, i) => s + i.impact.rescued, 0) },
+        { label: "Активних подій", value: medIncs.length },
+      ],
+      incidents: medIncs,
+    };
+  }, [activeService, serviceRegionFilter, incidents]);
+
+  // ═══ REGION LIST FOR FILTER ═══
+  const REGION_OPTIONS = useMemo(() => {
+    const regionsWithIncs = new Set(incidents.filter(i => i.status !== "Resolved").map(i => i.region));
+    return Object.entries(REGION_NAME_MAP)
+      .filter(([id]) => regionsWithIncs.has(id))
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [incidents]);
+
   // Personnel CRUD
   const [editingPerson, setEditingPerson] = useState<any>(null);
   const [personDialogOpen, setPersonDialogOpen] = useState(false);
@@ -257,15 +356,19 @@ const Dashboard = () => {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* ═══ SERVICE WIDGETS (from incidents, not calendar) ═══ */}
+      {/* ═══ SERVICE WIDGETS — CLICKABLE ═══ */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-l-4 border-l-red-500">
+        <Card className="border-l-4 border-l-red-500 cursor-pointer hover:shadow-lg hover:border-l-red-400 transition-all"
+          onClick={() => { setActiveService("ses"); setServiceRegionFilter("all"); }}>
           <CardContent className="p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="h-10 w-10 rounded-lg bg-red-500/10 flex items-center justify-center">
-                <Flame className="h-5 w-5 text-red-500" />
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-red-500/10 flex items-center justify-center">
+                  <Flame className="h-5 w-5 text-red-500" />
+                </div>
+                <h3 className="font-bold text-sm">ДСНС</h3>
               </div>
-              <h3 className="font-bold text-sm">ДСНС</h3>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div><p className="text-xl font-bold text-foreground">{serviceStats.ses.units}</p><p className="text-xs text-muted-foreground">Підрозділів</p></div>
@@ -275,29 +378,37 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-blue-500">
+        <Card className="border-l-4 border-l-blue-500 cursor-pointer hover:shadow-lg hover:border-l-blue-400 transition-all"
+          onClick={() => { setActiveService("police"); setServiceRegionFilter("all"); }}>
           <CardContent className="p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <Phone className="h-5 w-5 text-blue-500" />
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                  <Phone className="h-5 w-5 text-blue-500" />
+                </div>
+                <h3 className="font-bold text-sm">Поліція</h3>
               </div>
-              <h3 className="font-bold text-sm">Поліція</h3>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
-              <div><p className="text-xl font-bold text-foreground">{serviceStats.police.units}</p><p className="text-xs text-muted-foreground">Підрозділів</p></div>
+              <div><p className="text-xl font-bold text-foreground">{serviceStats.police.units}</p><p className="text-xs text-muted-foreground">Патрулів</p></div>
               <div><p className="text-xl font-bold text-foreground">{serviceStats.police.incidents}</p><p className="text-xs text-muted-foreground">Інцидентів</p></div>
               <div><p className="text-xl font-bold text-foreground">{serviceStats.police.personnel}</p><p className="text-xs text-muted-foreground">Персоналу</p></div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-green-500">
+        <Card className="border-l-4 border-l-green-500 cursor-pointer hover:shadow-lg hover:border-l-green-400 transition-all"
+          onClick={() => { setActiveService("medical"); setServiceRegionFilter("all"); }}>
           <CardContent className="p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-                <ShieldCheck className="h-5 w-5 text-green-500" />
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center">
+                  <ShieldCheck className="h-5 w-5 text-green-500" />
+                </div>
+                <h3 className="font-bold text-sm">Медична служба</h3>
               </div>
-              <h3 className="font-bold text-sm">Медична служба</h3>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div><p className="text-xl font-bold text-foreground">{serviceStats.medical.units}</p><p className="text-xs text-muted-foreground">Бригад</p></div>
@@ -710,6 +821,113 @@ const Dashboard = () => {
             <Button variant="outline" onClick={() => setPersonDialogOpen(false)}>Скасувати</Button>
             <Button onClick={savePerson} disabled={saving}>{saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Зберегти</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ SERVICE DETAIL DIALOG ═══ */}
+      <Dialog open={!!activeService} onOpenChange={(open) => { if (!open) setActiveService(null); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+          {serviceDetailData && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-3">
+                  <div className={`h-10 w-10 rounded-lg ${serviceDetailData.bgColor} flex items-center justify-center`}>
+                    <serviceDetailData.icon className={`h-5 w-5 ${serviceDetailData.color}`} />
+                  </div>
+                  <div>
+                    <span className="text-lg">{serviceDetailData.label}</span>
+                    <p className="text-xs text-muted-foreground font-normal mt-0.5">
+                      {serviceRegionFilter === "all" ? "Загальна картина по країні" : REGION_NAME_MAP[serviceRegionFilter]}
+                    </p>
+                  </div>
+                </DialogTitle>
+              </DialogHeader>
+
+              {/* Region Filter */}
+              <div className="flex items-center gap-2 py-2">
+                <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+                <Select value={serviceRegionFilter} onValueChange={setServiceRegionFilter}>
+                  <SelectTrigger className="w-[240px] h-8 text-xs">
+                    <SelectValue placeholder="Вся країна" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">🇺🇦 Вся країна</SelectItem>
+                    {REGION_OPTIONS.map(r => (
+                      <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {serviceRegionFilter !== "all" && (
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setServiceRegionFilter("all")}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+
+              <Separator />
+
+              <ScrollArea className="flex-1 pr-2">
+                <div className="space-y-4 py-2">
+                  {/* Key Stats Grid */}
+                  <div className="grid grid-cols-3 gap-3">
+                    {serviceDetailData.stats.map((stat, idx) => (
+                      <div key={idx} className="bg-muted/50 rounded-lg p-3 text-center">
+                        <p className="text-2xl font-bold text-foreground">{stat.value}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{stat.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Equipment list for SES */}
+                  {serviceDetailData.equipment.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                        <Truck className="h-4 w-4 text-muted-foreground" /> Спецтехніка на озброєнні
+                      </h4>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[...new Set(serviceDetailData.equipment)].map((eq, i) => (
+                          <Badge key={i} variant="outline" className="text-[11px]">{eq}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Incidents list for this service */}
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">
+                      Активні інциденти ({serviceDetailData.incidents.length})
+                    </h4>
+                    {serviceDetailData.incidents.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        {serviceRegionFilter === "all" ? "Немає активних інцидентів" : "Немає інцидентів у цьому регіоні"}
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {serviceDetailData.incidents.slice(0, 20).map(inc => {
+                          const sev = SEVERITY_CONFIG[inc.severity];
+                          const sta = STATUS_CONFIG[inc.status];
+                          return (
+                            <div key={inc.id} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/30 border border-border/50">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span className={`h-2 w-2 rounded-full shrink-0 ${sev?.color?.replace("text-", "bg-") || "bg-muted-foreground"}`} />
+                                <div className="min-w-0">
+                                  <span className="font-medium text-xs block truncate">{inc.title}</span>
+                                  <span className="text-muted-foreground text-[11px]">
+                                    {inc.regionName} • {inc.resources.personnel_total} ос. • {INCIDENT_TYPE_LABELS[inc.type]}
+                                  </span>
+                                </div>
+                              </div>
+                              <Badge variant="outline" className="text-[10px] shrink-0">{sta?.label || inc.status}</Badge>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </ScrollArea>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>
