@@ -150,8 +150,14 @@ export function useIncidents() {
     store.setLoading(false);
   }, []);
 
+  // Track previous incidents for new-critical detection
+  const prevIncidentIdsRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
-    fetchIncidents();
+    fetchIncidents().then(() => {
+      // Initialize known IDs
+      prevIncidentIdsRef.current = new Set(store.incidents.map(i => i.id));
+    });
 
     const channel = supabase
       .channel("incidents-realtime")
@@ -160,7 +166,27 @@ export function useIncidents() {
         { event: "*", schema: "public", table: "incidents" },
         (payload) => {
           if (payload.eventType === "INSERT") {
-            store.addIncident(rowToIncident(payload.new));
+            const newInc = rowToIncident(payload.new);
+            store.addIncident(newInc);
+
+            // ═══ CRITICAL INCIDENT IN DEFICIT REGION → ALERT ═══
+            if (newInc.severity === "Critical" || newInc.severity === "High") {
+              const inDeficit = isRegionInDeficit(newInc.region, store.incidents);
+              const regionName = REGION_NAME_MAP[newInc.region] || newInc.regionName;
+              
+              if (inDeficit) {
+                playAlertSound();
+                toast.error(`⚠️ КРИТИЧНИЙ ІНЦИДЕНТ у регіоні з дефіцитом ресурсів`, {
+                  description: `${newInc.title} — ${regionName}. Необхідне термінове підкріплення!`,
+                  duration: 15000,
+                });
+              } else {
+                toast.warning(`Новий ${newInc.severity === "Critical" ? "критичний" : "важливий"} інцидент`, {
+                  description: `${newInc.title} — ${regionName}`,
+                  duration: 8000,
+                });
+              }
+            }
           } else if (payload.eventType === "UPDATE") {
             store.updateIncidentInStore((payload.new as any).id, rowToIncident(payload.new));
           } else if (payload.eventType === "DELETE") {

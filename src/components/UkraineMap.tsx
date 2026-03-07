@@ -102,7 +102,7 @@ const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, o
       .catch(() => setLoading(false));
   }, []);
 
-  const projection = useMemo(() => geoMercator().center([31.5, 48.5]).scale(3200).translate([width / 2, height / 2]), []);
+  const projection = useMemo(() => geoMercator().center([31.5, 48.8]).scale(3600).translate([width / 2, height / 2]), []);
   const pathGenerator = useMemo(() => geoPath().projection(projection), [projection]);
 
   const getRegionData = useCallback((id: string) => regions.find((r) => r.id === id), [regions]);
