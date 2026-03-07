@@ -823,6 +823,113 @@ const Dashboard = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ═══ SERVICE DETAIL DIALOG ═══ */}
+      <Dialog open={!!activeService} onOpenChange={(open) => { if (!open) setActiveService(null); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+          {serviceDetailData && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-3">
+                  <div className={`h-10 w-10 rounded-lg ${serviceDetailData.bgColor} flex items-center justify-center`}>
+                    <serviceDetailData.icon className={`h-5 w-5 ${serviceDetailData.color}`} />
+                  </div>
+                  <div>
+                    <span className="text-lg">{serviceDetailData.label}</span>
+                    <p className="text-xs text-muted-foreground font-normal mt-0.5">
+                      {serviceRegionFilter === "all" ? "Загальна картина по країні" : REGION_NAME_MAP[serviceRegionFilter]}
+                    </p>
+                  </div>
+                </DialogTitle>
+              </DialogHeader>
+
+              {/* Region Filter */}
+              <div className="flex items-center gap-2 py-2">
+                <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+                <Select value={serviceRegionFilter} onValueChange={setServiceRegionFilter}>
+                  <SelectTrigger className="w-[240px] h-8 text-xs">
+                    <SelectValue placeholder="Вся країна" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">🇺🇦 Вся країна</SelectItem>
+                    {REGION_OPTIONS.map(r => (
+                      <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {serviceRegionFilter !== "all" && (
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setServiceRegionFilter("all")}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+
+              <Separator />
+
+              <ScrollArea className="flex-1 pr-2">
+                <div className="space-y-4 py-2">
+                  {/* Key Stats Grid */}
+                  <div className="grid grid-cols-3 gap-3">
+                    {serviceDetailData.stats.map((stat, idx) => (
+                      <div key={idx} className="bg-muted/50 rounded-lg p-3 text-center">
+                        <p className="text-2xl font-bold text-foreground">{stat.value}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{stat.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Equipment list for SES */}
+                  {serviceDetailData.equipment.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                        <Truck className="h-4 w-4 text-muted-foreground" /> Спецтехніка на озброєнні
+                      </h4>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[...new Set(serviceDetailData.equipment)].map((eq, i) => (
+                          <Badge key={i} variant="outline" className="text-[11px]">{eq}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Incidents list for this service */}
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">
+                      Активні інциденти ({serviceDetailData.incidents.length})
+                    </h4>
+                    {serviceDetailData.incidents.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        {serviceRegionFilter === "all" ? "Немає активних інцидентів" : "Немає інцидентів у цьому регіоні"}
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {serviceDetailData.incidents.slice(0, 20).map(inc => {
+                          const sev = SEVERITY_CONFIG[inc.severity];
+                          const sta = STATUS_CONFIG[inc.status];
+                          return (
+                            <div key={inc.id} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/30 border border-border/50">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span className={`h-2 w-2 rounded-full shrink-0 ${sev?.color?.replace("text-", "bg-") || "bg-muted-foreground"}`} />
+                                <div className="min-w-0">
+                                  <span className="font-medium text-xs block truncate">{inc.title}</span>
+                                  <span className="text-muted-foreground text-[11px]">
+                                    {inc.regionName} • {inc.resources.personnel_total} ос. • {INCIDENT_TYPE_LABELS[inc.type]}
+                                  </span>
+                                </div>
+                              </div>
+                              <Badge variant="outline" className="text-[10px] shrink-0">{sta?.label || inc.status}</Badge>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </ScrollArea>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
