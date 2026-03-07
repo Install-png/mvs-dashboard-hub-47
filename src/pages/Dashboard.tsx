@@ -223,6 +223,102 @@ const Dashboard = () => {
   const recommendations = useMemo(() => computeRecommendations(regionDeficits), [regionDeficits]);
   const criticalDeficits = useMemo(() => regionDeficits.filter(d => d.deficitPercent > 30), [regionDeficits]);
 
+  // ═══ SERVICE DETAIL DIALOG ═══
+  type ServiceType = "ses" | "police" | "medical" | null;
+  const [activeService, setActiveService] = useState<ServiceType>(null);
+  const [serviceRegionFilter, setServiceRegionFilter] = useState<string>("all");
+
+  const serviceDetailData = useMemo(() => {
+    if (!activeService) return null;
+    const filterIncs = (incs: Incident[]) => {
+      let filtered = incs.filter(i => i.status !== "Resolved");
+      if (serviceRegionFilter !== "all") {
+        filtered = filtered.filter(i => i.region === serviceRegionFilter);
+      }
+      return filtered;
+    };
+
+    const allActive = filterIncs(incidents);
+
+    if (activeService === "ses") {
+      const sesIncs = allActive.filter(i => i.category === "SES" || i.resources.ses_units > 0);
+      return {
+        label: "ДСНС",
+        icon: Flame,
+        color: "text-red-500",
+        bgColor: "bg-red-500/10",
+        totalIncidents: sesIncs.length,
+        totalUnits: sesIncs.reduce((s, i) => s + i.resources.ses_units, 0),
+        totalPersonnel: sesIncs.reduce((s, i) => s + i.resources.personnel_total, 0),
+        totalRescued: sesIncs.reduce((s, i) => s + i.impact.rescued, 0),
+        equipment: sesIncs.flatMap(i => i.resources.specialized_equipment || []),
+        stats: [
+          { label: "Підрозділів залучено", value: sesIncs.reduce((s, i) => s + i.resources.ses_units, 0) },
+          { label: "Особовий склад", value: sesIncs.reduce((s, i) => s + i.resources.personnel_total, 0) },
+          { label: "Врятовано людей", value: sesIncs.reduce((s, i) => s + i.impact.rescued, 0) },
+          { label: "Пожеж ліквідовано", value: sesIncs.filter(i => i.type === "Fire").length },
+          { label: "Спецтехніки одиниць", value: sesIncs.reduce((s, i) => s + i.resources.ses_units, 0) },
+          { label: "Медичних випадків", value: sesIncs.reduce((s, i) => s + i.impact.injured, 0) },
+        ],
+        incidents: sesIncs,
+      };
+    }
+    if (activeService === "police") {
+      const polIncs = allActive.filter(i => i.category === "Police" || i.resources.police_units > 0);
+      return {
+        label: "Поліція",
+        icon: Phone,
+        color: "text-blue-500",
+        bgColor: "bg-blue-500/10",
+        totalIncidents: polIncs.length,
+        totalUnits: polIncs.reduce((s, i) => s + i.resources.police_units, 0),
+        totalPersonnel: polIncs.reduce((s, i) => s + i.resources.personnel_total, 0),
+        totalRescued: 0,
+        equipment: [],
+        stats: [
+          { label: "Патрулів залучено", value: polIncs.reduce((s, i) => s + i.resources.police_units, 0) },
+          { label: "Особовий склад", value: polIncs.reduce((s, i) => s + i.resources.personnel_total, 0) },
+          { label: "Інцидентів у роботі", value: polIncs.length },
+          { label: "Кримінальних подій", value: polIncs.filter(i => i.type === "Crime").length },
+          { label: "Затримань", value: polIncs.filter(i => i.type === "Crime" && i.status === "Resolved").length },
+          { label: "Критичних подій", value: polIncs.filter(i => i.severity === "Critical").length },
+        ],
+        incidents: polIncs,
+      };
+    }
+    // medical
+    const medIncs = allActive.filter(i => i.category === "Medical" || i.resources.medical_units > 0);
+    return {
+      label: "Медична служба",
+      icon: ShieldCheck,
+      color: "text-green-500",
+      bgColor: "bg-green-500/10",
+      totalIncidents: medIncs.length,
+      totalUnits: medIncs.reduce((s, i) => s + i.resources.medical_units, 0),
+      totalPersonnel: medIncs.reduce((s, i) => s + i.resources.personnel_total, 0),
+      totalRescued: medIncs.reduce((s, i) => s + i.impact.rescued, 0),
+      equipment: [],
+      stats: [
+        { label: "Бригад залучено", value: medIncs.reduce((s, i) => s + i.resources.medical_units, 0) },
+        { label: "Особовий склад", value: medIncs.reduce((s, i) => s + i.resources.personnel_total, 0) },
+        { label: "Постраждалих", value: medIncs.reduce((s, i) => s + i.impact.injured, 0) },
+        { label: "Загиблих", value: medIncs.reduce((s, i) => s + i.impact.fatalities, 0) },
+        { label: "Врятовано", value: medIncs.reduce((s, i) => s + i.impact.rescued, 0) },
+        { label: "Активних подій", value: medIncs.length },
+      ],
+      incidents: medIncs,
+    };
+  }, [activeService, serviceRegionFilter, incidents]);
+
+  // ═══ REGION LIST FOR FILTER ═══
+  const REGION_OPTIONS = useMemo(() => {
+    const regionsWithIncs = new Set(incidents.filter(i => i.status !== "Resolved").map(i => i.region));
+    return Object.entries(REGION_NAME_MAP)
+      .filter(([id]) => regionsWithIncs.has(id))
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [incidents]);
+
   // Personnel CRUD
   const [editingPerson, setEditingPerson] = useState<any>(null);
   const [personDialogOpen, setPersonDialogOpen] = useState(false);
