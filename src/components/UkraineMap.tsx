@@ -80,8 +80,8 @@ function clusterIncidents(incidents: { incident: Incident; x: number; y: number 
   return clusters;
 }
 
-const width = 800;
-const height = 520;
+const width = 900;
+const height = 600;
 
 const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, onSelectIncident, hoveredIncidentId, highlightedIncidentId }: UkraineMapProps) => {
   const [hoveredRegion, setHoveredRegion] = useState<string | null>(null);
