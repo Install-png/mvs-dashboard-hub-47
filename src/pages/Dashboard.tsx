@@ -356,15 +356,19 @@ const Dashboard = () => {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* ═══ SERVICE WIDGETS (from incidents, not calendar) ═══ */}
+      {/* ═══ SERVICE WIDGETS — CLICKABLE ═══ */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-l-4 border-l-red-500">
+        <Card className="border-l-4 border-l-red-500 cursor-pointer hover:shadow-lg hover:border-l-red-400 transition-all"
+          onClick={() => { setActiveService("ses"); setServiceRegionFilter("all"); }}>
           <CardContent className="p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="h-10 w-10 rounded-lg bg-red-500/10 flex items-center justify-center">
-                <Flame className="h-5 w-5 text-red-500" />
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-red-500/10 flex items-center justify-center">
+                  <Flame className="h-5 w-5 text-red-500" />
+                </div>
+                <h3 className="font-bold text-sm">ДСНС</h3>
               </div>
-              <h3 className="font-bold text-sm">ДСНС</h3>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div><p className="text-xl font-bold text-foreground">{serviceStats.ses.units}</p><p className="text-xs text-muted-foreground">Підрозділів</p></div>
@@ -374,29 +378,37 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-blue-500">
+        <Card className="border-l-4 border-l-blue-500 cursor-pointer hover:shadow-lg hover:border-l-blue-400 transition-all"
+          onClick={() => { setActiveService("police"); setServiceRegionFilter("all"); }}>
           <CardContent className="p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <Phone className="h-5 w-5 text-blue-500" />
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                  <Phone className="h-5 w-5 text-blue-500" />
+                </div>
+                <h3 className="font-bold text-sm">Поліція</h3>
               </div>
-              <h3 className="font-bold text-sm">Поліція</h3>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
-              <div><p className="text-xl font-bold text-foreground">{serviceStats.police.units}</p><p className="text-xs text-muted-foreground">Підрозділів</p></div>
+              <div><p className="text-xl font-bold text-foreground">{serviceStats.police.units}</p><p className="text-xs text-muted-foreground">Патрулів</p></div>
               <div><p className="text-xl font-bold text-foreground">{serviceStats.police.incidents}</p><p className="text-xs text-muted-foreground">Інцидентів</p></div>
               <div><p className="text-xl font-bold text-foreground">{serviceStats.police.personnel}</p><p className="text-xs text-muted-foreground">Персоналу</p></div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-green-500">
+        <Card className="border-l-4 border-l-green-500 cursor-pointer hover:shadow-lg hover:border-l-green-400 transition-all"
+          onClick={() => { setActiveService("medical"); setServiceRegionFilter("all"); }}>
           <CardContent className="p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-                <ShieldCheck className="h-5 w-5 text-green-500" />
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center">
+                  <ShieldCheck className="h-5 w-5 text-green-500" />
+                </div>
+                <h3 className="font-bold text-sm">Медична служба</h3>
               </div>
-              <h3 className="font-bold text-sm">Медична служба</h3>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div><p className="text-xl font-bold text-foreground">{serviceStats.medical.units}</p><p className="text-xs text-muted-foreground">Бригад</p></div>
