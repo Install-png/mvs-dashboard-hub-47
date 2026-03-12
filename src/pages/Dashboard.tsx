@@ -903,8 +903,8 @@ const Dashboard = () => {
                       {["Регіон", "Активних", "Крит.", "Персонал", "Підрозділів", "Статус"].map(h => <th key={h} className="text-left py-2 text-muted-foreground font-medium text-xs">{h}</th>)}
                     </tr></thead>
                     <tbody>{regionDeficits.sort((a, b) => b.deficitPercent - a.deficitPercent).map(d => (
-                      <tr key={d.regionId} className="border-b border-border/50 hover:bg-muted/50">
-                        <td className="py-2 text-xs font-medium">{d.regionName}</td>
+                      <tr key={d.regionId} className="border-b border-border/50 hover:bg-muted/50 cursor-pointer transition-colors" onClick={() => navigateToRegion(d.regionId)}>
+                        <td className="py-2 text-xs font-medium text-primary underline-offset-2 hover:underline">{d.regionName}</td>
                         <td className="py-2 text-xs">{d.activeCount}</td>
                         <td className="py-2 text-xs">{d.criticalCount > 0 ? <Badge variant="destructive" className="text-[9px]">{d.criticalCount}</Badge> : "—"}</td>
                         <td className="py-2 text-xs"><span className={d.deficitPersonnel > 0 ? "text-destructive font-medium" : ""}>{d.currentPersonnel}/{d.requiredPersonnel}</span></td>
