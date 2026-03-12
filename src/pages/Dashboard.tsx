@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { startOfDay, subDays, getMonth, getDay, isToday, format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -101,8 +102,14 @@ type ServiceTab = "overview" | "ses" | "ngu" | "police" | "medical" | "resources
 const Dashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { incidents, loading: incidentsLoading } = useIncidentStore();
+  const navigate = useNavigate();
+  const { incidents, loading: incidentsLoading, setSelectedRegion } = useIncidentStore();
   useIncidents();
+
+  const navigateToRegion = useCallback((regionId: string) => {
+    setSelectedRegion(regionId);
+    navigate("/situation-center");
+  }, [setSelectedRegion, navigate]);
 
   const [personnel, setPersonnel] = useState<any[]>([]);
   const [loadingPersonnel, setLoadingPersonnel] = useState(true);
@@ -599,7 +606,7 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent className="space-y-2">
             {criticalDeficits.slice(0, 3).map(d => (
-              <div key={d.regionId} className="flex items-center gap-3">
+              <div key={d.regionId} className="flex items-center gap-3 cursor-pointer rounded-md p-1 -m-1 hover:bg-destructive/10 transition-colors" onClick={() => navigateToRegion(d.regionId)}>
                 <MapPin className="h-3.5 w-3.5 text-destructive shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-0.5">
@@ -609,6 +616,7 @@ const Dashboard = () => {
                   <Progress value={Math.max(0, 100 - d.deficitPercent)} className="h-1" />
                 </div>
                 <Badge variant="destructive" className="text-[9px] shrink-0">{d.deficitPercent}%</Badge>
+                <ChevronRight className="h-3 w-3 text-destructive/50 shrink-0" />
               </div>
             ))}
           </CardContent>
@@ -895,8 +903,8 @@ const Dashboard = () => {
                       {["Регіон", "Активних", "Крит.", "Персонал", "Підрозділів", "Статус"].map(h => <th key={h} className="text-left py-2 text-muted-foreground font-medium text-xs">{h}</th>)}
                     </tr></thead>
                     <tbody>{regionDeficits.sort((a, b) => b.deficitPercent - a.deficitPercent).map(d => (
-                      <tr key={d.regionId} className="border-b border-border/50 hover:bg-muted/50">
-                        <td className="py-2 text-xs font-medium">{d.regionName}</td>
+                      <tr key={d.regionId} className="border-b border-border/50 hover:bg-muted/50 cursor-pointer transition-colors" onClick={() => navigateToRegion(d.regionId)}>
+                        <td className="py-2 text-xs font-medium text-primary underline-offset-2 hover:underline">{d.regionName}</td>
                         <td className="py-2 text-xs">{d.activeCount}</td>
                         <td className="py-2 text-xs">{d.criticalCount > 0 ? <Badge variant="destructive" className="text-[9px]">{d.criticalCount}</Badge> : "—"}</td>
                         <td className="py-2 text-xs"><span className={d.deficitPersonnel > 0 ? "text-destructive font-medium" : ""}>{d.currentPersonnel}/{d.requiredPersonnel}</span></td>
