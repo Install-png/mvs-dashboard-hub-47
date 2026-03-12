@@ -102,8 +102,14 @@ type ServiceTab = "overview" | "ses" | "ngu" | "police" | "medical" | "resources
 const Dashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { incidents, loading: incidentsLoading } = useIncidentStore();
+  const navigate = useNavigate();
+  const { incidents, loading: incidentsLoading, setSelectedRegion } = useIncidentStore();
   useIncidents();
+
+  const navigateToRegion = useCallback((regionId: string) => {
+    setSelectedRegion(regionId);
+    navigate("/situation-center");
+  }, [setSelectedRegion, navigate]);
 
   const [personnel, setPersonnel] = useState<any[]>([]);
   const [loadingPersonnel, setLoadingPersonnel] = useState(true);
