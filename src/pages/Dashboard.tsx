@@ -606,7 +606,7 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent className="space-y-2">
             {criticalDeficits.slice(0, 3).map(d => (
-              <div key={d.regionId} className="flex items-center gap-3">
+              <div key={d.regionId} className="flex items-center gap-3 cursor-pointer rounded-md p-1 -m-1 hover:bg-destructive/10 transition-colors" onClick={() => navigateToRegion(d.regionId)}>
                 <MapPin className="h-3.5 w-3.5 text-destructive shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-0.5">
@@ -616,6 +616,7 @@ const Dashboard = () => {
                   <Progress value={Math.max(0, 100 - d.deficitPercent)} className="h-1" />
                 </div>
                 <Badge variant="destructive" className="text-[9px] shrink-0">{d.deficitPercent}%</Badge>
+                <ChevronRight className="h-3 w-3 text-destructive/50 shrink-0" />
               </div>
             ))}
           </CardContent>
