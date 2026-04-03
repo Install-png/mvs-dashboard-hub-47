@@ -551,91 +551,138 @@ const Dashboard = () => {
   );
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* ═══ TOP SERVICE CARDS ═══ */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { key: "ses" as ServiceTab, label: "ДСНС", icon: Flame, color: "border-l-red-500", stats: [`${sesData.units} підр.`, `${sesData.rescued} врят.`, `${sesData.personnel} ос.`] },
-          { key: "ngu" as ServiceTab, label: "НГУ", icon: Shield, color: "border-l-gray-500", stats: [`${nguData.total} опер.`, `${nguData.personnel} ос.`, `${nguData.specialUnits} спец.`] },
-          { key: "police" as ServiceTab, label: "Поліція", icon: Phone, color: "border-l-blue-500", stats: [`${policeData.patrols} патр.`, `${policeData.crimes} крим.`, `${policeData.personnel} ос.`] },
-          { key: "medical" as ServiceTab, label: "Медицина", icon: Stethoscope, color: "border-l-green-500", stats: [`${medicalData.brigades} бриг.`, `${medicalData.injured} постр.`, `${medicalData.rescued} врят.`] },
-        ].map(svc => (
-          <Card key={svc.key} className={`border-l-4 ${svc.color} cursor-pointer hover:shadow-lg transition-all ${activeTab === svc.key ? "ring-2 ring-primary/50" : ""}`}
-            onClick={() => setActiveTab(svc.key)}>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <svc.icon className="h-4 w-4 text-muted-foreground" />
-                <span className="font-bold text-xs">{svc.label}</span>
-                <ChevronRight className="h-3 w-3 text-muted-foreground ml-auto" />
-              </div>
-              <div className="space-y-0.5">
-                {svc.stats.map((s, i) => <p key={i} className="text-[11px] text-muted-foreground">{s}</p>)}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* ═══ GENERAL STATS ═══ */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {stats.map((stat, i) => (
-          <Card key={i} className="hover:shadow-md transition-shadow">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground">{stat.title}</p>
-                  <p className="text-xl font-bold text-foreground mt-1">{stat.value}</p>
-                  <span className="text-[10px] text-muted-foreground">{stat.change}</span>
-                </div>
-                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <stat.icon className="h-5 w-5 text-primary" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* ═══ DEFICIT ALERT ═══ */}
-      {criticalDeficits.length > 0 && (
-        <Card className="border-destructive/50 bg-destructive/5">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2 text-destructive">
-              <Zap className="h-4 w-4" /> Дефіцит ресурсів — {criticalDeficits.length} регіон(ів)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {criticalDeficits.slice(0, 3).map(d => (
-              <div key={d.regionId} className="flex items-center gap-3 cursor-pointer rounded-md p-1 -m-1 hover:bg-destructive/10 transition-colors" onClick={() => navigateToRegion(d.regionId)}>
-                <MapPin className="h-3.5 w-3.5 text-destructive shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-0.5">
-                    <span className="text-xs font-medium">{d.regionName}</span>
-                    <span className="text-[10px] text-destructive">−{d.deficitPersonnel} ос.</span>
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-5">
+      {/* ═══ HEADER ROW: Stats + Deficit ═══ */}
+      <div className="grid lg:grid-cols-[1fr_320px] gap-4">
+        {/* General stats */}
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {stats.map((stat, i) => (
+              <Card key={i} className="hover:shadow-md transition-shadow">
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">{stat.title}</p>
+                      <p className="text-xl font-bold text-foreground mt-0.5">{stat.value}</p>
+                      <span className="text-[10px] text-muted-foreground">{stat.change}</span>
+                    </div>
+                    <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <stat.icon className="h-4 w-4 text-primary" />
+                    </div>
                   </div>
-                  <Progress value={Math.max(0, 100 - d.deficitPercent)} className="h-1" />
-                </div>
-                <Badge variant="destructive" className="text-[9px] shrink-0">{d.deficitPercent}%</Badge>
-                <ChevronRight className="h-3 w-3 text-destructive/50 shrink-0" />
-              </div>
+                </CardContent>
+              </Card>
             ))}
-          </CardContent>
-        </Card>
-      )}
+          </div>
+
+          {/* Service cards row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {[
+              { key: "ses" as ServiceTab, label: "ДСНС", icon: Flame, color: "border-l-red-500", value: sesData.total, sub: `${sesData.units} підр. • ${sesData.personnel} ос.` },
+              { key: "ngu" as ServiceTab, label: "НГУ", icon: Shield, color: "border-l-gray-500", value: nguData.total, sub: `${nguData.specialUnits} спец. • ${nguData.personnel} ос.` },
+              { key: "police" as ServiceTab, label: "Поліція", icon: Phone, color: "border-l-blue-500", value: policeData.total, sub: `${policeData.patrols} патр. • ${policeData.personnel} ос.` },
+              { key: "medical" as ServiceTab, label: "Медицина", icon: Stethoscope, color: "border-l-green-500", value: medicalData.total, sub: `${medicalData.brigades} бриг. • ${medicalData.personnel} ос.` },
+            ].map(svc => (
+              <Card key={svc.key} className={`border-l-4 ${svc.color} cursor-pointer hover:shadow-lg transition-all ${activeTab === svc.key ? "ring-2 ring-primary/50 shadow-md" : ""}`}
+                onClick={() => setActiveTab(svc.key)}>
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <svc.icon className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="font-bold text-[11px]">{svc.label}</span>
+                    <ChevronRight className="h-3 w-3 text-muted-foreground ml-auto" />
+                  </div>
+                  <p className="text-lg font-bold text-foreground">{svc.value}</p>
+                  <p className="text-[10px] text-muted-foreground">{svc.sub}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+
+        {/* Deficit sidebar */}
+        <div className="space-y-3">
+          {criticalDeficits.length > 0 ? (
+            <Card className="border-destructive/50 bg-destructive/5">
+              <CardHeader className="pb-2 pt-3 px-4">
+                <CardTitle className="text-xs flex items-center gap-2 text-destructive">
+                  <Zap className="h-3.5 w-3.5" /> Дефіцит — {criticalDeficits.length} регіон(ів)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-3 space-y-2">
+                {criticalDeficits.slice(0, 4).map(d => (
+                  <div key={d.regionId} className="flex items-center gap-2 cursor-pointer rounded-md p-1 -m-1 hover:bg-destructive/10 transition-colors" onClick={() => navigateToRegion(d.regionId)}>
+                    <MapPin className="h-3 w-3 text-destructive shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="text-[11px] font-medium truncate">{d.regionName}</span>
+                        <span className="text-[9px] text-destructive">−{d.deficitPersonnel} ос.</span>
+                      </div>
+                      <Progress value={Math.max(0, 100 - d.deficitPercent)} className="h-1" />
+                    </div>
+                    <Badge variant="destructive" className="text-[8px] shrink-0">{d.deficitPercent}%</Badge>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="bg-green-500/5 border-green-500/30">
+              <CardContent className="p-4 text-center">
+                <ShieldCheck className="h-5 w-5 text-green-600 mx-auto mb-1" />
+                <p className="text-xs font-medium text-green-700">Ресурси в нормі</p>
+                <p className="text-[10px] text-muted-foreground">Дефіцитів не виявлено</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Quick recommendations */}
+          {recommendations.length > 0 && (
+            <Card>
+              <CardHeader className="pb-1 pt-3 px-4">
+                <CardTitle className="text-xs flex items-center gap-1.5">
+                  <ArrowRightLeft className="h-3.5 w-3.5 text-primary" /> Рекомендації
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-3 space-y-1.5">
+                {recommendations.slice(0, 3).map((rec, i) => (
+                  <div key={i} className="text-[10px] text-muted-foreground p-1.5 rounded bg-muted/50">
+                    <span className="text-green-600 font-medium">{rec.fromName}</span>
+                    <span className="mx-1">→</span>
+                    <span className="text-destructive font-medium">{rec.toName}</span>
+                    <span className="ml-1">({rec.personnel} ос.)</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
 
       {/* ═══ MAIN TABS ═══ */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ServiceTab)} className="w-full">
-        <TabsList className="grid w-full grid-cols-5 lg:grid-cols-9 h-10">
-          <TabsTrigger value="overview" className="text-[11px] gap-1"><BarChart3 className="h-3.5 w-3.5" />Огляд</TabsTrigger>
-          <TabsTrigger value="ses" className="text-[11px] gap-1"><Flame className="h-3.5 w-3.5" />ДСНС</TabsTrigger>
-          <TabsTrigger value="ngu" className="text-[11px] gap-1"><Shield className="h-3.5 w-3.5" />НГУ</TabsTrigger>
-          <TabsTrigger value="police" className="text-[11px] gap-1"><Phone className="h-3.5 w-3.5" />НПУ</TabsTrigger>
-          <TabsTrigger value="medical" className="text-[11px] gap-1"><Stethoscope className="h-3.5 w-3.5" />ЕМД</TabsTrigger>
-          <TabsTrigger value="resources" className="text-[11px] gap-1 hidden lg:flex"><ArrowRightLeft className="h-3.5 w-3.5" />Ресурси</TabsTrigger>
-          <TabsTrigger value="incidents" className="text-[11px] gap-1 hidden lg:flex"><AlertTriangle className="h-3.5 w-3.5" />Журнал</TabsTrigger>
-          <TabsTrigger value="personnel" className="text-[11px] gap-1 hidden lg:flex"><Users className="h-3.5 w-3.5" />Персонал</TabsTrigger>
-          <TabsTrigger value="analytics" className="text-[11px] gap-1 hidden lg:flex"><Activity className="h-3.5 w-3.5" />Аналітика</TabsTrigger>
-        </TabsList>
+        <div className="flex flex-wrap gap-1.5 mb-4 border-b border-border pb-3">
+          {[
+            { value: "overview", label: "Огляд", icon: BarChart3 },
+            { value: "ses", label: "ДСНС", icon: Flame },
+            { value: "ngu", label: "НГУ", icon: Shield },
+            { value: "police", label: "НПУ", icon: Phone },
+            { value: "medical", label: "ЕМД", icon: Stethoscope },
+            { value: "resources", label: "Ресурси", icon: ArrowRightLeft },
+            { value: "incidents", label: "Журнал", icon: AlertTriangle },
+            { value: "personnel", label: "Персонал", icon: Users },
+            { value: "analytics", label: "Аналітика", icon: Activity },
+          ].map(tab => (
+            <Button
+              key={tab.value}
+              variant={activeTab === tab.value ? "default" : "ghost"}
+              size="sm"
+              className={cn("gap-1.5 h-8 text-[11px]", activeTab === tab.value && "shadow-sm")}
+              onClick={() => setActiveTab(tab.value as ServiceTab)}
+            >
+              <tab.icon className="h-3.5 w-3.5" />
+              {tab.label}
+            </Button>
+          ))}
+        </div>
 
         {/* ═══════ OVERVIEW ═══════ */}
         <TabsContent value="overview" className="space-y-4 mt-4" ref={tabContentRef}>
