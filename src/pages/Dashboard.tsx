@@ -1,11 +1,10 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { startOfDay, subDays, getMonth, getDay, isToday, format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -19,39 +18,33 @@ import { useIncidents } from "@/hooks/useIncidents";
 import { useIncidentStore } from "@/stores/useIncidentStore";
 import { REGION_NAME_MAP } from "@/components/UkraineMap";
 import {
-  SEVERITY_CONFIG, STATUS_CONFIG, INCIDENT_TYPE_LABELS, CATEGORY_LABELS,
+  SEVERITY_CONFIG, STATUS_CONFIG, INCIDENT_TYPE_LABELS,
   type Incident, type SeverityLevel,
 } from "@/data/mockIncidents";
 import {
   Shield, Users, FileText, AlertTriangle, TrendingUp,
   BarChart3, Activity, Pencil, Plus, Trash2, Loader2,
   Flame, Phone, ShieldCheck, ArrowRightLeft, MapPin, Zap,
-  Truck, Heart, Siren, ChevronRight, X, Download, Clock,
+  Truck, Heart, ChevronRight, X, Download, Clock,
   Target, Eye, Building2, Crosshair, Radio, Stethoscope,
-  Droplets, Pill, Ambulance, ShieldAlert, Sword,
+  Droplets, Ambulance, ShieldAlert, Sword,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, RadarChart, Radar, PolarGrid,
-  PolarAngleAxis, PolarRadiusAxis, AreaChart, Area,
+  PolarAngleAxis, PolarRadiusAxis,
 } from "recharts";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import html2canvas from "html2canvas";
 
-const CHART_COLORS = ["hsl(24, 95%, 53%)", "hsl(24, 80%, 65%)", "hsl(30, 100%, 75%)", "hsl(30, 40%, 85%)", "hsl(200, 70%, 50%)", "hsl(150, 60%, 45%)", "hsl(280, 60%, 55%)", "hsl(340, 70%, 55%)"];
+const CHART_COLORS = ["hsl(24,95%,53%)", "hsl(200,70%,50%)", "hsl(150,60%,45%)", "hsl(280,60%,55%)", "hsl(340,70%,55%)", "hsl(30,100%,75%)"];
 const MONTH_NAMES = ["Січ", "Лют", "Бер", "Кві", "Тра", "Чер", "Лип", "Сер", "Вер", "Жов", "Лис", "Гру"];
 const DAY_NAMES = ["Нд", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
 const REGION_IDS = Object.keys(REGION_NAME_MAP);
 
-// ═══ RESOURCE NORMS ═══
 const SEVERITY_RESOURCE_NORM: Record<string, { personnel: number; units: number }> = {
-  Critical: { personnel: 30, units: 8 },
-  High: { personnel: 15, units: 5 },
-  Major: { personnel: 8, units: 3 },
-  Medium: { personnel: 4, units: 2 },
-  Minor: { personnel: 2, units: 1 },
-  Low: { personnel: 1, units: 1 },
+  Critical: { personnel: 30, units: 8 }, High: { personnel: 15, units: 5 }, Major: { personnel: 8, units: 3 },
+  Medium: { personnel: 4, units: 2 }, Minor: { personnel: 2, units: 1 }, Low: { personnel: 1, units: 1 },
 };
 
 interface RegionDeficit {
@@ -89,16 +82,14 @@ function computeRecommendations(deficits: RegionDeficit[]): Recommendation[] {
     for (const donor of canHelp) {
       if (recs.length >= 5) break;
       const sP = donor.currentPersonnel - donor.requiredPersonnel;
-      const sU = donor.currentUnits - donor.requiredUnits;
       if (sP <= 0) continue;
-      recs.push({ from: donor.regionId, fromName: donor.regionName, to: need.regionId, toName: need.regionName, personnel: Math.min(sP, need.deficitPersonnel), units: Math.min(Math.max(0, sU), need.deficitUnits), reason: need.criticalCount > 0 ? `${need.criticalCount} критичних подій` : `${need.activeCount} активних подій` });
+      recs.push({ from: donor.regionId, fromName: donor.regionName, to: need.regionId, toName: need.regionName, personnel: Math.min(sP, need.deficitPersonnel), units: Math.min(Math.max(0, donor.currentUnits - donor.requiredUnits), need.deficitUnits), reason: need.criticalCount > 0 ? `${need.criticalCount} критичних` : `${need.activeCount} активних` });
     }
   }
   return recs;
 }
 
-// ═══ SERVICE TAB TYPE ═══
-type ServiceTab = "overview" | "ses" | "ngu" | "police" | "medical" | "resources" | "incidents" | "personnel" | "analytics";
+type ServiceKey = "ses" | "ngu" | "police" | "medical";
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -107,188 +98,135 @@ const Dashboard = () => {
   const { incidents, loading: incidentsLoading, setSelectedRegion } = useIncidentStore();
   useIncidents();
 
-  const navigateToRegion = useCallback((regionId: string) => {
-    setSelectedRegion(regionId);
-    navigate("/situation-center");
-  }, [setSelectedRegion, navigate]);
-
+  const [regionFilter, setRegionFilter] = useState("all");
+  const [serviceDialog, setServiceDialog] = useState<ServiceKey | null>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
   const [personnel, setPersonnel] = useState<any[]>([]);
   const [loadingPersonnel, setLoadingPersonnel] = useState(true);
-  const [activeTab, setActiveTab] = useState<ServiceTab>("overview");
-  const [regionFilter, setRegionFilter] = useState<string>("all");
-  const [generatingPdf, setGeneratingPdf] = useState(false);
-  const tabContentRef = useRef<HTMLDivElement>(null);
+  const [personDialogOpen, setPersonDialogOpen] = useState(false);
+  const [editingPerson, setEditingPerson] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
 
   useState(() => {
     supabase.from("personnel").select("*").order("created_at", { ascending: false })
       .then(({ data }) => { setPersonnel(data || []); setLoadingPersonnel(false); });
   });
 
-  // ═══ FILTERED INCIDENTS ═══
+  const navigateToRegion = useCallback((regionId: string) => {
+    setSelectedRegion(regionId);
+    navigate("/situation-center");
+  }, [setSelectedRegion, navigate]);
+
   const filteredIncidents = useMemo(() => {
     let list = incidents.filter(i => i.status !== "Resolved");
     if (regionFilter !== "all") list = list.filter(i => i.region === regionFilter);
     return list;
   }, [incidents, regionFilter]);
 
-  const allActiveIncidents = useMemo(() => incidents.filter(i => i.status !== "Resolved"), [incidents]);
+  const allActive = useMemo(() => incidents.filter(i => i.status !== "Resolved"), [incidents]);
 
-  // ═══ GENERAL STATS ═══
-  const stats = useMemo(() => {
-    const active = allActiveIncidents.length;
-    const todayCount = incidents.filter(i => isToday(new Date(i.timestamp))).length;
+  // ═══ KPI ═══
+  const kpis = useMemo(() => {
+    const active = allActive.length;
+    const todayIncs = incidents.filter(i => isToday(new Date(i.timestamp)));
     const resolved = incidents.filter(i => i.status === "Resolved").length;
     const rate = incidents.length > 0 ? Math.round((resolved / incidents.length) * 100) : 0;
-    return [
-      { title: "Активні інциденти", value: String(active), icon: AlertTriangle, change: `${incidents.length} всього`, color: "text-destructive" },
-      { title: "Персонал задіяно", value: String(allActiveIncidents.reduce((s, i) => s + i.resources.personnel_total, 0)), icon: Users, change: `${personnel.filter((p: any) => p.status === "На службі").length} на службі`, color: "text-primary" },
-      { title: "Врятовано сьогодні", value: String(incidents.filter(i => isToday(new Date(i.timestamp))).reduce((s, i) => s + i.impact.rescued, 0)), icon: TrendingUp, change: `${todayCount} подій за добу`, color: "text-primary" },
-      { title: "Показник вирішення", value: `${rate}%`, icon: FileText, change: `${resolved}/${incidents.length}`, color: "text-primary" },
-    ];
-  }, [incidents, personnel, allActiveIncidents]);
+    const totalPersonnel = allActive.reduce((s, i) => s + i.resources.personnel_total, 0);
+    const rescued = todayIncs.reduce((s, i) => s + i.impact.rescued, 0);
+    return { active, todayCount: todayIncs.length, resolved, rate, totalPersonnel, rescued };
+  }, [incidents, allActive]);
 
-  // ═══ SERVICE-LEVEL STATS ═══
-  const sesData = useMemo(() => {
-    const incs = filteredIncidents.filter(i => i.category === "SES" || i.resources.ses_units > 0);
-    const fires = incs.filter(i => i.type === "Fire");
-    const eod = incs.filter(i => i.type === "EOD");
-    const rescue = incs.filter(i => i.type === "Rescue");
-    const byRegion = Object.entries(REGION_NAME_MAP).map(([id, name]) => {
-      const rIncs = incs.filter(i => i.region === id);
-      return { region: name, incidents: rIncs.length, personnel: rIncs.reduce((s, i) => s + i.resources.personnel_total, 0), units: rIncs.reduce((s, i) => s + i.resources.ses_units, 0), rescued: rIncs.reduce((s, i) => s + i.impact.rescued, 0) };
+  // ═══ SERVICE DATA ═══
+  const serviceStats = useMemo(() => {
+    const fi = filteredIncidents;
+    const sesIncs = fi.filter(i => i.category === "SES" || i.resources.ses_units > 0);
+    const polIncs = fi.filter(i => i.category === "Police" || i.resources.police_units > 0);
+    const medIncs = fi.filter(i => i.category === "Medical" || i.resources.medical_units > 0);
+    const nguIncs = fi.filter(i => i.category === "Combined" || i.lead_agency === "НГУ" || (i.resources.police_units > 0 && i.resources.ses_units > 0));
+
+    const makeByRegion = (incs: Incident[]) => Object.entries(REGION_NAME_MAP).map(([id, name]) => {
+      const r = incs.filter(i => i.region === id);
+      return { region: name, incidents: r.length, personnel: r.reduce((s, i) => s + i.resources.personnel_total, 0), units: r.reduce((s, i) => s + i.resources.ses_units + i.resources.police_units + i.resources.medical_units, 0), rescued: r.reduce((s, i) => s + i.impact.rescued, 0), injured: r.reduce((s, i) => s + i.impact.injured, 0) };
     }).filter(r => r.incidents > 0).sort((a, b) => b.incidents - a.incidents);
 
-    const avgResponseMin = incs.length > 0 ? Math.round(15 + Math.random() * 10) : 0; // simulated
-    const equipmentList = [...new Set(incs.flatMap(i => i.resources.specialized_equipment || []))];
-    const heatmapData = byRegion.map(r => ({ name: r.region.replace(" область", "").replace("ська", "").substring(0, 8), пожежі: fires.filter(f => f.regionName === r.region).length, НС: r.incidents, персонал: r.personnel }));
-
     return {
-      total: incs.length, fires: fires.length, eod: eod.length, rescue: rescue.length,
-      units: incs.reduce((s, i) => s + i.resources.ses_units, 0),
-      personnel: incs.reduce((s, i) => s + i.resources.personnel_total, 0),
-      rescued: incs.reduce((s, i) => s + i.impact.rescued, 0),
-      injured: incs.reduce((s, i) => s + i.impact.injured, 0),
-      equipment: equipmentList, avgResponseMin, byRegion, heatmapData,
-      eodArea: eod.length * 2.5, // km² simulated
-      eodNeutralized: eod.reduce((s, i) => s + i.impact.rescued, 0),
-      reserveUnits: Math.max(0, 25 - incs.reduce((s, i) => s + i.resources.ses_units, 0)),
-    };
-  }, [filteredIncidents]);
-
-  const nguData = useMemo(() => {
-    // NGU uses police_units as proxy + combined category
-    const incs = filteredIncidents.filter(i => i.category === "Combined" || i.lead_agency === "НГУ" || (i.resources.police_units > 0 && i.resources.ses_units > 0));
-    const patrolIncs = filteredIncidents.filter(i => i.resources.police_units > 0);
-    const byRegion = Object.entries(REGION_NAME_MAP).map(([id, name]) => {
-      const rIncs = incs.filter(i => i.region === id);
-      return { region: name, incidents: rIncs.length, personnel: rIncs.reduce((s, i) => s + i.resources.personnel_total, 0) };
-    }).filter(r => r.incidents > 0).sort((a, b) => b.incidents - a.incidents);
-
-    const critInfraIncs = incs.filter(i => i.severity === "Critical" || i.severity === "High");
-    const readinessPercent = Math.min(100, Math.round(70 + Math.random() * 25));
-    const readinessData = [
-      { subject: "Особовий склад", value: readinessPercent, fullMark: 100 },
-      { subject: "Спецтехніка", value: Math.round(60 + Math.random() * 30), fullMark: 100 },
-      { subject: "Озброєння", value: Math.round(75 + Math.random() * 20), fullMark: 100 },
-      { subject: "Зв'язок", value: Math.round(80 + Math.random() * 15), fullMark: 100 },
-      { subject: "Логістика", value: Math.round(55 + Math.random() * 35), fullMark: 100 },
-      { subject: "Медзабезпечення", value: Math.round(65 + Math.random() * 25), fullMark: 100 },
-    ];
-
-    return {
-      total: incs.length, personnel: incs.reduce((s, i) => s + i.resources.personnel_total, 0),
-      patrolJoint: patrolIncs.length, critInfra: critInfraIncs.length,
-      infraIncidents: critInfraIncs.filter(i => i.type === "Crime" || i.type === "EOD").length,
-      readinessPercent, readinessData, byRegion,
-      specialUnits: Math.round(3 + Math.random() * 5),
-      vehiclesActive: Math.round(8 + Math.random() * 12),
-    };
-  }, [filteredIncidents]);
-
-  const policeData = useMemo(() => {
-    const incs = filteredIncidents.filter(i => i.category === "Police" || i.resources.police_units > 0);
-    const crimes = incs.filter(i => i.type === "Crime");
-    const critical = incs.filter(i => i.severity === "Critical" || i.severity === "High");
-    const byRegion = Object.entries(REGION_NAME_MAP).map(([id, name]) => {
-      const rIncs = incs.filter(i => i.region === id);
-      return { region: name, incidents: rIncs.length, patrols: rIncs.reduce((s, i) => s + i.resources.police_units, 0), personnel: rIncs.reduce((s, i) => s + i.resources.personnel_total, 0), crimes: rIncs.filter(i => i.type === "Crime").length };
-    }).filter(r => r.incidents > 0).sort((a, b) => b.incidents - a.incidents);
-
-    const callCategories = [
-      { name: "Тяжкі злочини", value: crimes.filter(c => c.severity === "Critical" || c.severity === "High").length },
-      { name: "Адмінпорушення", value: Math.max(1, incs.length - crimes.length) },
-      { name: "ДТП", value: incs.filter(i => i.type === "Rescue" && i.resources.police_units > 0).length },
-      { name: "Інші виклики", value: Math.max(0, incs.length - crimes.length - 2) },
-    ].filter(c => c.value > 0);
-
-    const resolvedRate = incs.length > 0 ? Math.round((incs.filter(i => i.status === "Resolved" || i.status === "Containment").length / incs.length) * 100) : 0;
-    const avgArrivalMin = incs.length > 0 ? Math.round(7 + Math.random() * 8) : 0;
-
-    const patrolStatus = [
-      { name: "На завданні", value: incs.reduce((s, i) => s + i.resources.police_units, 0) },
-      { name: "Вільні", value: Math.max(2, 15 - incs.reduce((s, i) => s + i.resources.police_units, 0)) },
-      { name: "У відділку", value: Math.round(3 + Math.random() * 4) },
-    ];
-
-    return {
-      total: incs.length, crimes: crimes.length, critical: critical.length,
-      patrols: incs.reduce((s, i) => s + i.resources.police_units, 0),
-      personnel: incs.reduce((s, i) => s + i.resources.personnel_total, 0),
-      arrests: crimes.filter(c => c.status === "Containment" || c.status === "Resolved").length,
-      resolvedRate, avgArrivalMin, callCategories, patrolStatus, byRegion,
-    };
-  }, [filteredIncidents]);
-
-  const medicalData = useMemo(() => {
-    const incs = filteredIncidents.filter(i => i.category === "Medical" || i.resources.medical_units > 0);
-    const byRegion = Object.entries(REGION_NAME_MAP).map(([id, name]) => {
-      const rIncs = incs.filter(i => i.region === id);
-      return { region: name, incidents: rIncs.length, brigades: rIncs.reduce((s, i) => s + i.resources.medical_units, 0), injured: rIncs.reduce((s, i) => s + i.impact.injured, 0), rescued: rIncs.reduce((s, i) => s + i.impact.rescued, 0), fatalities: rIncs.reduce((s, i) => s + i.impact.fatalities, 0) };
-    }).filter(r => r.incidents > 0).sort((a, b) => b.incidents - a.incidents);
-
-    const totalInjured = incs.reduce((s, i) => s + i.impact.injured, 0);
-    const totalFatalities = incs.reduce((s, i) => s + i.impact.fatalities, 0);
-    const hospitalLoad = [
-      { name: "Реанімація", load: Math.min(100, Math.round(40 + totalInjured * 8 + Math.random() * 20)), status: "" as string },
-      { name: "Хірургія", load: Math.min(100, Math.round(30 + totalInjured * 5 + Math.random() * 15)), status: "" },
-      { name: "Травматологія", load: Math.min(100, Math.round(35 + totalInjured * 6 + Math.random() * 18)), status: "" },
-    ].map(h => ({ ...h, status: h.load > 85 ? "critical" : h.load > 60 ? "warning" : "normal" }));
-
-    const bloodSupply = [
-      { group: "I (O)", level: Math.round(40 + Math.random() * 50) },
-      { group: "II (A)", level: Math.round(30 + Math.random() * 60) },
-      { group: "III (B)", level: Math.round(35 + Math.random() * 55) },
-      { group: "IV (AB)", level: Math.round(45 + Math.random() * 45) },
-    ];
-
-    const emdCalls = [
-      { name: "Екстрені", value: incs.filter(i => i.severity === "Critical" || i.severity === "High").length },
-      { name: "Неекстрені", value: Math.max(1, incs.length - incs.filter(i => i.severity === "Critical" || i.severity === "High").length) },
-    ];
-
-    return {
-      total: incs.length, brigades: incs.reduce((s, i) => s + i.resources.medical_units, 0),
-      personnel: incs.reduce((s, i) => s + i.resources.personnel_total, 0),
-      injured: totalInjured, fatalities: totalFatalities,
-      rescued: incs.reduce((s, i) => s + i.impact.rescued, 0),
-      hospitalLoad, bloodSupply, emdCalls, byRegion,
-      freeBrigades: Math.max(2, 12 - incs.reduce((s, i) => s + i.resources.medical_units, 0)),
+      ses: {
+        total: sesIncs.length, fires: sesIncs.filter(i => i.type === "Fire").length,
+        units: sesIncs.reduce((s, i) => s + i.resources.ses_units, 0),
+        personnel: sesIncs.reduce((s, i) => s + i.resources.personnel_total, 0),
+        rescued: sesIncs.reduce((s, i) => s + i.impact.rescued, 0),
+        eod: sesIncs.filter(i => i.type === "EOD").length,
+        avgResponse: sesIncs.length > 0 ? Math.round(12 + Math.random() * 8) : 0,
+        reserve: Math.max(0, 25 - sesIncs.reduce((s, i) => s + i.resources.ses_units, 0)),
+        equipment: [...new Set(sesIncs.flatMap(i => i.resources.specialized_equipment || []))],
+        byRegion: makeByRegion(sesIncs),
+      },
+      ngu: {
+        total: nguIncs.length, personnel: nguIncs.reduce((s, i) => s + i.resources.personnel_total, 0),
+        patrol: fi.filter(i => i.resources.police_units > 0).length,
+        critInfra: nguIncs.filter(i => i.severity === "Critical" || i.severity === "High").length,
+        specialUnits: Math.round(3 + Math.random() * 5),
+        vehicles: Math.round(8 + Math.random() * 12),
+        readiness: Math.min(100, Math.round(70 + Math.random() * 25)),
+        readinessData: [
+          { subject: "Особовий склад", value: Math.round(70 + Math.random() * 25), fullMark: 100 },
+          { subject: "Спецтехніка", value: Math.round(60 + Math.random() * 30), fullMark: 100 },
+          { subject: "Озброєння", value: Math.round(75 + Math.random() * 20), fullMark: 100 },
+          { subject: "Зв'язок", value: Math.round(80 + Math.random() * 15), fullMark: 100 },
+          { subject: "Логістика", value: Math.round(55 + Math.random() * 35), fullMark: 100 },
+        ],
+        byRegion: makeByRegion(nguIncs),
+      },
+      police: {
+        total: polIncs.length, crimes: polIncs.filter(i => i.type === "Crime").length,
+        patrols: polIncs.reduce((s, i) => s + i.resources.police_units, 0),
+        personnel: polIncs.reduce((s, i) => s + i.resources.personnel_total, 0),
+        arrests: polIncs.filter(c => c.status === "Containment" || c.status === "Resolved").length,
+        resolvedRate: polIncs.length > 0 ? Math.round((polIncs.filter(i => i.status === "Resolved" || i.status === "Containment").length / polIncs.length) * 100) : 0,
+        avgArrival: polIncs.length > 0 ? Math.round(7 + Math.random() * 8) : 0,
+        callCategories: [
+          { name: "Тяжкі", value: polIncs.filter(c => c.type === "Crime" && (c.severity === "Critical" || c.severity === "High")).length || 1 },
+          { name: "Адмін", value: Math.max(1, polIncs.length - polIncs.filter(c => c.type === "Crime").length) },
+          { name: "ДТП", value: polIncs.filter(i => i.type === "Rescue" && i.resources.police_units > 0).length || 1 },
+        ],
+        patrolStatus: [
+          { name: "На завданні", value: polIncs.reduce((s, i) => s + i.resources.police_units, 0) },
+          { name: "Вільні", value: Math.max(2, 15 - polIncs.reduce((s, i) => s + i.resources.police_units, 0)) },
+          { name: "У відділку", value: Math.round(3 + Math.random() * 4) },
+        ],
+        byRegion: makeByRegion(polIncs),
+      },
+      medical: {
+        total: medIncs.length,
+        brigades: medIncs.reduce((s, i) => s + i.resources.medical_units, 0),
+        personnel: medIncs.reduce((s, i) => s + i.resources.personnel_total, 0),
+        injured: medIncs.reduce((s, i) => s + i.impact.injured, 0),
+        fatalities: medIncs.reduce((s, i) => s + i.impact.fatalities, 0),
+        rescued: medIncs.reduce((s, i) => s + i.impact.rescued, 0),
+        freeBrigades: Math.max(2, 12 - medIncs.reduce((s, i) => s + i.resources.medical_units, 0)),
+        hospitalLoad: [
+          { name: "Реанімація", load: Math.min(100, Math.round(40 + medIncs.reduce((s, i) => s + i.impact.injured, 0) * 8)) },
+          { name: "Хірургія", load: Math.min(100, Math.round(30 + medIncs.reduce((s, i) => s + i.impact.injured, 0) * 5)) },
+          { name: "Травматологія", load: Math.min(100, Math.round(35 + medIncs.reduce((s, i) => s + i.impact.injured, 0) * 6)) },
+        ].map(h => ({ ...h, status: h.load > 85 ? "critical" : h.load > 60 ? "warning" : "normal" })),
+        bloodSupply: [
+          { group: "I (O)", level: Math.round(40 + Math.random() * 50) },
+          { group: "II (A)", level: Math.round(30 + Math.random() * 60) },
+          { group: "III (B)", level: Math.round(35 + Math.random() * 55) },
+          { group: "IV (AB)", level: Math.round(45 + Math.random() * 45) },
+        ],
+        byRegion: makeByRegion(medIncs),
+      },
     };
   }, [filteredIncidents]);
 
   // Charts
-  const monthlyData = useMemo(() => {
-    const counts: Record<number, number> = {};
-    incidents.forEach(i => { const m = getMonth(new Date(i.timestamp)); counts[m] = (counts[m] || 0) + 1; });
-    return MONTH_NAMES.map((name, idx) => ({ name, value: counts[idx] || 0 }));
-  }, [incidents]);
-
   const trendData = useMemo(() => {
     const now = new Date();
     return Array.from({ length: 7 }, (_, i) => {
       const d = subDays(startOfDay(now), 6 - i);
       const dayIncs = incidents.filter(inc => startOfDay(new Date(inc.timestamp)).getTime() === d.getTime());
-      return { name: DAY_NAMES[getDay(d)], incidents: dayIncs.length, resolved: dayIncs.filter(inc => inc.status === "Resolved").length };
+      return { name: DAY_NAMES[getDay(d)], інциденти: dayIncs.length, вирішено: dayIncs.filter(inc => inc.status === "Resolved").length };
     });
   }, [incidents]);
 
@@ -296,12 +234,6 @@ const Dashboard = () => {
     const counts: Record<string, number> = {};
     incidents.forEach(i => { const t = INCIDENT_TYPE_LABELS[i.type] || i.type; counts[t] = (counts[t] || 0) + 1; });
     return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value }));
-  }, [incidents]);
-
-  const severityData = useMemo(() => {
-    const counts: Record<string, number> = {};
-    incidents.forEach(i => { const s = SEVERITY_CONFIG[i.severity]?.label || i.severity; counts[s] = (counts[s] || 0) + 1; });
-    return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [incidents]);
 
   const regionDeficits = useMemo(() => computeRegionDeficits(incidents), [incidents]);
@@ -314,10 +246,6 @@ const Dashboard = () => {
   }, [incidents]);
 
   // Personnel CRUD
-  const [editingPerson, setEditingPerson] = useState<any>(null);
-  const [personDialogOpen, setPersonDialogOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-
   const fetchPersonnel = async () => {
     const { data } = await supabase.from("personnel").select("*").order("created_at", { ascending: false });
     setPersonnel(data || []);
@@ -332,750 +260,381 @@ const Dashboard = () => {
   };
   const deletePerson = async (id: string) => { await supabase.from("personnel").delete().eq("id", id); fetchPersonnel(); };
 
-  // ═══ PDF REPORT GENERATOR ═══
-  const generateServicePdf = useCallback(async () => {
+  // PDF
+  const generatePdf = useCallback(async () => {
     if (!user) return;
     setGeneratingPdf(true);
     const pdf = new jsPDF("p", "mm", "a4");
     const pageW = pdf.internal.pageSize.getWidth();
     const now = new Date();
-    const tabLabels: Record<string, string> = { overview: "Загальний огляд", ses: "ДСНС", ngu: "Національна гвардія", police: "Національна поліція", medical: "Медична служба / ЕМД", resources: "Ресурси", incidents: "Інциденти", personnel: "Персонал", analytics: "Аналітика" };
-    const serviceName = tabLabels[activeTab] || "Звіт";
     const regionLabel = regionFilter === "all" ? "Вся Україна" : (REGION_NAME_MAP[regionFilter] || regionFilter);
 
-    // Header
-    pdf.setFillColor(15, 23, 42);
-    pdf.rect(0, 0, pageW, 32, "F");
-    pdf.setTextColor(255, 255, 255);
-    pdf.setFontSize(16); pdf.setFont("helvetica", "bold");
-    pdf.text(`ОПЕРАТИВНИЙ ЗВІТ — ${serviceName.toUpperCase()}`, pageW / 2, 12, { align: "center" });
+    pdf.setFillColor(15, 23, 42); pdf.rect(0, 0, pageW, 28, "F");
+    pdf.setTextColor(255, 255, 255); pdf.setFontSize(14); pdf.setFont("helvetica", "bold");
+    pdf.text("ОПЕРАТИВНИЙ ЗВІТ — СИТУАЦІЙНИЙ ЦЕНТР", pageW / 2, 11, { align: "center" });
     pdf.setFontSize(9); pdf.setFont("helvetica", "normal");
-    pdf.text(`Регіон: ${regionLabel} | Зріз: ${format(now, "HH:mm dd.MM.yyyy")}`, pageW / 2, 20, { align: "center" });
-    pdf.text(`Офіцер: ${user.email ?? "—"} | Система: Ситуаційний центр`, pageW / 2, 26, { align: "center" });
+    pdf.text(`${regionLabel} | ${format(now, "HH:mm dd.MM.yyyy")} | ${user.email ?? "—"}`, pageW / 2, 19, { align: "center" });
 
-    let y = 38;
-    pdf.setTextColor(0, 0, 0);
+    let y = 34; pdf.setTextColor(0, 0, 0);
+    pdf.setFontSize(11); pdf.setFont("helvetica", "bold"); pdf.text("КРИТИЧНІ ІНДИКАТОРИ", 14, y); y += 5;
+    autoTable(pdf, { startY: y, head: [["Показник", "Значення", "Показник", "Значення"]], body: [
+      ["Активних інцидентів", String(kpis.active), "Персонал задіяно", String(kpis.totalPersonnel)],
+      ["ДСНС подій", String(serviceStats.ses.total), "Поліція подій", String(serviceStats.police.total)],
+      ["НГУ операцій", String(serviceStats.ngu.total), "Медицина подій", String(serviceStats.medical.total)],
+      ["Врятовано сьогодні", String(kpis.rescued), "Показник вирішення", `${kpis.rate}%`],
+    ], theme: "grid", headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 8 }, bodyStyles: { fontSize: 8 }, columnStyles: { 0: { fontStyle: "bold", cellWidth: 45 }, 1: { cellWidth: 30 }, 2: { fontStyle: "bold", cellWidth: 45 }, 3: { cellWidth: 30 } } });
+    y = (pdf as any).lastAutoTable.finalY + 6;
 
-    // Critical indicators block
-    pdf.setFontSize(12); pdf.setFont("helvetica", "bold");
-    pdf.text("I. КРИТИЧНІ ІНДИКАТОРИ", 14, y); y += 5;
-
-    if (activeTab === "ses" || activeTab === "overview") {
-      autoTable(pdf, {
-        startY: y,
-        head: [["Показник", "Значення", "Показник", "Значення"]],
-        body: [
-          ["Інцидентів ДСНС", String(sesData.total), "Пожеж", String(sesData.fires)],
-          ["Підрозділів залучено", String(sesData.units), "Врятовано людей", String(sesData.rescued)],
-          ["Особовий склад", String(sesData.personnel), "Резерв техніки", String(sesData.reserveUnits)],
-          ["Піротехнічних виїздів", String(sesData.eod), "Обстежено (км²)", String(sesData.eodArea.toFixed(1))],
-          ["Сер. час реагування", `${sesData.avgResponseMin} хв`, "Постраждалих", String(sesData.injured)],
-        ],
-        theme: "grid",
-        headStyles: { fillColor: [185, 28, 28], textColor: [255, 255, 255], fontSize: 8 },
-        bodyStyles: { fontSize: 8 },
-        columnStyles: { 0: { fontStyle: "bold", cellWidth: 45 }, 1: { cellWidth: 30 }, 2: { fontStyle: "bold", cellWidth: 45 }, 3: { cellWidth: 30 } },
-      });
+    if (regionDeficits.length > 0) {
+      pdf.setFontSize(11); pdf.setFont("helvetica", "bold"); pdf.text("РЕСУРСИ ПО РЕГІОНАМ", 14, y); y += 4;
+      autoTable(pdf, { startY: y, head: [["Регіон", "Активних", "Крит.", "Персонал", "Статус"]], body: regionDeficits.slice(0, 12).map(d => [d.regionName, String(d.activeCount), String(d.criticalCount), `${d.currentPersonnel}/${d.requiredPersonnel}`, d.surplus ? "Надлишок" : d.deficitPercent > 30 ? `Дефіцит ${d.deficitPercent}%` : "Норма"]), theme: "striped", headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 7 }, bodyStyles: { fontSize: 7 } });
       y = (pdf as any).lastAutoTable.finalY + 6;
     }
 
-    if (activeTab === "police" || activeTab === "overview") {
-      pdf.setFontSize(11); pdf.setFont("helvetica", "bold");
-      pdf.text(activeTab === "overview" ? "Поліція:" : "II. ДЕТАЛІ ПОЛІЦІЇ", 14, y); y += 4;
-      autoTable(pdf, {
-        startY: y,
-        head: [["Показник", "Значення", "Показник", "Значення"]],
-        body: [
-          ["Інцидентів НПУ", String(policeData.total), "Кримінальних подій", String(policeData.crimes)],
-          ["Патрулів залучено", String(policeData.patrols), "Затримань", String(policeData.arrests)],
-          ["Розкриття (%)", `${policeData.resolvedRate}%`, "Сер. час прибуття", `${policeData.avgArrivalMin} хв`],
-        ],
-        theme: "grid",
-        headStyles: { fillColor: [29, 78, 216], textColor: [255, 255, 255], fontSize: 8 },
-        bodyStyles: { fontSize: 8 },
-        columnStyles: { 0: { fontStyle: "bold", cellWidth: 45 }, 1: { cellWidth: 30 }, 2: { fontStyle: "bold", cellWidth: 45 }, 3: { cellWidth: 30 } },
-      });
-      y = (pdf as any).lastAutoTable.finalY + 6;
-    }
-
-    if (activeTab === "ngu" || activeTab === "overview") {
-      pdf.setFontSize(11); pdf.setFont("helvetica", "bold");
-      pdf.text(activeTab === "overview" ? "НГУ:" : "II. ДЕТАЛІ НГУ", 14, y); y += 4;
-      autoTable(pdf, {
-        startY: y,
-        head: [["Показник", "Значення", "Показник", "Значення"]],
-        body: [
-          ["Операцій", String(nguData.total), "Особовий склад", String(nguData.personnel)],
-          ["Спільне патрулювання", String(nguData.patrolJoint), "Крит. інфраструктура", String(nguData.critInfra)],
-          ["Спецпідрозділів", String(nguData.specialUnits), "Техніки активно", String(nguData.vehiclesActive)],
-        ],
-        theme: "grid",
-        headStyles: { fillColor: [75, 85, 99], textColor: [255, 255, 255], fontSize: 8 },
-        bodyStyles: { fontSize: 8 },
-        columnStyles: { 0: { fontStyle: "bold", cellWidth: 45 }, 1: { cellWidth: 30 }, 2: { fontStyle: "bold", cellWidth: 45 }, 3: { cellWidth: 30 } },
-      });
-      y = (pdf as any).lastAutoTable.finalY + 6;
-    }
-
-    if (activeTab === "medical" || activeTab === "overview") {
-      pdf.setFontSize(11); pdf.setFont("helvetica", "bold");
-      pdf.text(activeTab === "overview" ? "Медицина:" : "II. ДЕТАЛІ МЕДИЧНОЇ СЛУЖБИ", 14, y); y += 4;
-      autoTable(pdf, {
-        startY: y,
-        head: [["Показник", "Значення", "Показник", "Значення"]],
-        body: [
-          ["Бригад залучено", String(medicalData.brigades), "Вільних бригад", String(medicalData.freeBrigades)],
-          ["Постраждалих", String(medicalData.injured), "Загиблих", String(medicalData.fatalities)],
-          ["Врятовано", String(medicalData.rescued), "Активних подій", String(medicalData.total)],
-        ],
-        theme: "grid",
-        headStyles: { fillColor: [21, 128, 61], textColor: [255, 255, 255], fontSize: 8 },
-        bodyStyles: { fontSize: 8 },
-        columnStyles: { 0: { fontStyle: "bold", cellWidth: 45 }, 1: { cellWidth: 30 }, 2: { fontStyle: "bold", cellWidth: 45 }, 3: { cellWidth: 30 } },
-      });
-      y = (pdf as any).lastAutoTable.finalY + 6;
-    }
-
-    // Regional breakdown table
-    if (y < 240) {
-      pdf.setFontSize(11); pdf.setFont("helvetica", "bold");
-      pdf.text("РОЗПОДІЛ ПО РЕГІОНАМ", 14, y); y += 4;
-
-      const regData = regionFilter === "all"
-        ? regionDeficits.slice(0, 10).map(d => [d.regionName, String(d.activeCount), String(d.criticalCount), `${d.currentPersonnel}/${d.requiredPersonnel}`, d.deficitPercent > 30 ? `Дефіцит ${d.deficitPercent}%` : d.surplus ? "Надлишок" : "Норма"])
-        : [[regionLabel, String(filteredIncidents.length), String(filteredIncidents.filter(i => i.severity === "Critical").length), String(filteredIncidents.reduce((s, i) => s + i.resources.personnel_total, 0)), "—"]];
-
-      autoTable(pdf, {
-        startY: y,
-        head: [["Регіон", "Активних", "Критичних", "Персонал", "Статус"]],
-        body: regData,
-        theme: "striped",
-        headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 7 },
-        bodyStyles: { fontSize: 7 },
-      });
-      y = (pdf as any).lastAutoTable.finalY + 6;
-    }
-
-    // Incident registry
     const relevantIncs = regionFilter === "all" ? incidents : incidents.filter(i => i.region === regionFilter);
     if (relevantIncs.length > 0) {
-      if (y > 240) { pdf.addPage(); y = 15; }
-      pdf.setFontSize(11); pdf.setFont("helvetica", "bold");
-      pdf.text("РЕЄСТР ІНЦИДЕНТІВ", 14, y); y += 4;
-      autoTable(pdf, {
-        startY: y,
-        head: [["Час", "Регіон", "Тип", "Назва", "Ос.скл.", "Р/П/З"]],
-        body: relevantIncs.sort((a, b) => b.risk_level - a.risk_level).slice(0, 30).map(inc => [
-          format(new Date(inc.timestamp), "HH:mm"), inc.regionName, INCIDENT_TYPE_LABELS[inc.type] || inc.type,
-          inc.title.substring(0, 35), String(inc.resources.personnel_total),
-          `${inc.impact.rescued}/${inc.impact.injured}/${inc.impact.fatalities}`,
-        ]),
-        theme: "striped",
-        headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 7 },
-        bodyStyles: { fontSize: 7 },
-      });
+      if (y > 230) { pdf.addPage(); y = 15; }
+      pdf.setFontSize(11); pdf.setFont("helvetica", "bold"); pdf.text("РЕЄСТР ІНЦИДЕНТІВ", 14, y); y += 4;
+      autoTable(pdf, { startY: y, head: [["Час", "Регіон", "Тип", "Назва", "Ос.скл.", "Р/П/З"]], body: relevantIncs.sort((a, b) => b.risk_level - a.risk_level).slice(0, 30).map(inc => [format(new Date(inc.timestamp), "HH:mm"), inc.regionName, INCIDENT_TYPE_LABELS[inc.type] || inc.type, inc.title.substring(0, 35), String(inc.resources.personnel_total), `${inc.impact.rescued}/${inc.impact.injured}/${inc.impact.fatalities}`]), theme: "striped", headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 7 }, bodyStyles: { fontSize: 7 } });
     }
 
-    // Footer
     const totalPages = pdf.getNumberOfPages();
-    for (let p = 1; p <= totalPages; p++) {
-      pdf.setPage(p);
-      pdf.setFontSize(7); pdf.setTextColor(120, 120, 120);
-      pdf.text(`Сторінка ${p}/${totalPages} | Конфіденційно | ${format(now, "dd.MM.yyyy HH:mm")}`, pageW / 2, pdf.internal.pageSize.getHeight() - 5, { align: "center" });
-    }
+    for (let p = 1; p <= totalPages; p++) { pdf.setPage(p); pdf.setFontSize(7); pdf.setTextColor(120, 120, 120); pdf.text(`Сторінка ${p}/${totalPages} | Конфіденційно | ${format(now, "dd.MM.yyyy HH:mm")}`, pageW / 2, pdf.internal.pageSize.getHeight() - 5, { align: "center" }); }
+    pdf.save(`report-${format(now, "yyyy-MM-dd-HHmm")}.pdf`);
 
-    pdf.save(`${activeTab}-report-${format(now, "yyyy-MM-dd-HHmm")}.pdf`);
-
-    // Save to DB
-    await supabase.from("reports" as any).insert({
-      user_id: user.id,
-      title: `${serviceName} — ${regionLabel} — ${format(now, "dd.MM.yyyy HH:mm")}`,
-      report_type: activeTab,
-      period_start: format(now, "yyyy-MM-dd"),
-      period_end: format(now, "yyyy-MM-dd"),
-      data: { tab: activeTab, region: regionFilter, incidents_count: relevantIncs.length, generated: now.toISOString() },
-    } as any);
-
+    await supabase.from("reports" as any).insert({ user_id: user.id, title: `Звіт — ${regionLabel} — ${format(now, "dd.MM.yyyy HH:mm")}`, report_type: "overview", period_start: format(now, "yyyy-MM-dd"), period_end: format(now, "yyyy-MM-dd"), data: { region: regionFilter, incidents_count: relevantIncs.length, generated: now.toISOString() } } as any);
     setGeneratingPdf(false);
-    toast({ title: "Звіт згенеровано", description: `PDF ${serviceName} завантажено та збережено.` });
-  }, [activeTab, regionFilter, incidents, filteredIncidents, sesData, policeData, nguData, medicalData, regionDeficits, user, toast]);
+    toast({ title: "Звіт згенеровано", description: "PDF завантажено та збережено." });
+  }, [incidents, regionFilter, kpis, serviceStats, regionDeficits, user, toast]);
 
-  // ═══ RENDER HELPERS ═══
-  const RegionFilterBar = () => (
-    <div className="flex items-center gap-3 flex-wrap">
-      <div className="flex items-center gap-2">
-        <MapPin className="h-4 w-4 text-muted-foreground" />
-        <Select value={regionFilter} onValueChange={setRegionFilter}>
-          <SelectTrigger className="w-[220px] h-8 text-xs"><SelectValue placeholder="Вся країна" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">🇺🇦 Вся країна</SelectItem>
-            {REGION_OPTIONS.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        {regionFilter !== "all" && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setRegionFilter("all")}><X className="h-3.5 w-3.5" /></Button>}
-      </div>
-      <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={generateServicePdf} disabled={generatingPdf}>
-        {generatingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-        Сформувати звіт
-      </Button>
-    </div>
-  );
-
-  const StatCard = ({ label, value, icon: Icon, sub }: { label: string; value: string | number; icon: any; sub?: string }) => (
-    <div className="bg-muted/50 rounded-lg p-3">
-      <div className="flex items-center gap-2 mb-1">
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        <span className="text-[11px] text-muted-foreground">{label}</span>
-      </div>
-      <p className="text-2xl font-bold text-foreground">{value}</p>
-      {sub && <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>}
-    </div>
-  );
-
-  const RegionTable = ({ data, columns }: { data: any[]; columns: { key: string; label: string }[] }) => (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border">
-            {columns.map(c => <th key={c.key} className="text-left py-2 text-muted-foreground font-medium text-xs">{c.label}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {data.slice(0, 10).map((row, i) => (
-            <tr key={i} className="border-b border-border/50 hover:bg-muted/50">
-              {columns.map(c => <td key={c.key} className="py-2 text-xs">{row[c.key]}</td>)}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+  // ═══ SERVICE CARDS CONFIG ═══
+  const services: { key: ServiceKey; label: string; icon: any; borderColor: string; stats: { label: string; value: string | number }[] }[] = [
+    { key: "ses", label: "ДСНС", icon: Flame, borderColor: "border-l-red-500", stats: [{ label: "Інцидентів", value: serviceStats.ses.total }, { label: "Підрозділів", value: serviceStats.ses.units }, { label: "Особового складу", value: serviceStats.ses.personnel }, { label: "Врятовано", value: serviceStats.ses.rescued }] },
+    { key: "ngu", label: "Нац. гвардія", icon: Shield, borderColor: "border-l-slate-500", stats: [{ label: "Операцій", value: serviceStats.ngu.total }, { label: "Спецпідрозділів", value: serviceStats.ngu.specialUnits }, { label: "Особового складу", value: serviceStats.ngu.personnel }, { label: "Готовність", value: `${serviceStats.ngu.readiness}%` }] },
+    { key: "police", label: "Нац. поліція", icon: Phone, borderColor: "border-l-blue-500", stats: [{ label: "Інцидентів", value: serviceStats.police.total }, { label: "Патрулів", value: serviceStats.police.patrols }, { label: "Особового складу", value: serviceStats.police.personnel }, { label: "Розкриття", value: `${serviceStats.police.resolvedRate}%` }] },
+    { key: "medical", label: "Медична служба", icon: Stethoscope, borderColor: "border-l-emerald-500", stats: [{ label: "Подій", value: serviceStats.medical.total }, { label: "Бригад", value: serviceStats.medical.brigades }, { label: "Постраждалих", value: serviceStats.medical.injured }, { label: "Врятовано", value: serviceStats.medical.rescued }] },
+  ];
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-5">
-      {/* ═══ HEADER ROW: Stats + Deficit ═══ */}
-      <div className="grid lg:grid-cols-[1fr_320px] gap-4">
-        {/* General stats */}
+    <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-5">
+      {/* ═══ HEADER ═══ */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="text-lg md:text-xl font-bold tracking-tight" style={{ fontFamily: "Montserrat, sans-serif" }}>
+          Оперативна панель
+        </h1>
+        <div className="flex items-center gap-2">
+          <Select value={regionFilter} onValueChange={setRegionFilter}>
+            <SelectTrigger className="w-[200px] h-8 text-xs"><SelectValue placeholder="Вся країна" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">🇺🇦 Вся країна</SelectItem>
+              {REGION_OPTIONS.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {regionFilter !== "all" && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setRegionFilter("all")}><X className="h-3.5 w-3.5" /></Button>}
+          <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={generatePdf} disabled={generatingPdf}>
+            {generatingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            Звіт
+          </Button>
+        </div>
+      </div>
+
+      {/* ═══ KPI ROW ═══ */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {[
+          { label: "Активні", value: kpis.active, icon: AlertTriangle, accent: "text-destructive", bg: "bg-destructive/10" },
+          { label: "За добу", value: kpis.todayCount, icon: Clock, accent: "text-orange-500", bg: "bg-orange-500/10" },
+          { label: "Персонал", value: kpis.totalPersonnel, icon: Users, accent: "text-primary", bg: "bg-primary/10" },
+          { label: "Врятовано", value: kpis.rescued, icon: Heart, accent: "text-emerald-600", bg: "bg-emerald-500/10" },
+          { label: "Вирішення", value: `${kpis.rate}%`, icon: TrendingUp, accent: "text-primary", bg: "bg-primary/10" },
+        ].map(k => (
+          <Card key={k.label}>
+            <CardContent className="p-3 flex items-center gap-3">
+              <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center shrink-0", k.bg)}>
+                <k.icon className={cn("h-4 w-4", k.accent)} />
+              </div>
+              <div>
+                <p className="text-xl font-bold leading-none">{k.value}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">{k.label}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* ═══ MAIN GRID: Services + Sidebar ═══ */}
+      <div className="grid lg:grid-cols-[1fr_300px] gap-4">
         <div className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {stats.map((stat, i) => (
-              <Card key={i} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[11px] text-muted-foreground">{stat.title}</p>
-                      <p className="text-xl font-bold text-foreground mt-0.5">{stat.value}</p>
-                      <span className="text-[10px] text-muted-foreground">{stat.change}</span>
+          {/* Service cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {services.map(svc => (
+              <Card key={svc.key} className={cn("border-l-4 cursor-pointer hover:shadow-lg transition-all group", svc.borderColor)}
+                onClick={() => setServiceDialog(svc.key)}>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <svc.icon className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-semibold text-sm">{svc.label}</span>
                     </div>
-                    <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <stat.icon className="h-4 w-4 text-primary" />
-                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                    {svc.stats.map(s => (
+                      <div key={s.label}>
+                        <p className="text-lg font-bold leading-none">{s.value}</p>
+                        <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                      </div>
+                    ))}
                   </div>
                 </CardContent>
               </Card>
             ))}
           </div>
 
-          {/* Service cards row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {[
-              { key: "ses" as ServiceTab, label: "ДСНС", icon: Flame, color: "border-l-red-500", value: sesData.total, sub: `${sesData.units} підр. • ${sesData.personnel} ос.` },
-              { key: "ngu" as ServiceTab, label: "НГУ", icon: Shield, color: "border-l-gray-500", value: nguData.total, sub: `${nguData.specialUnits} спец. • ${nguData.personnel} ос.` },
-              { key: "police" as ServiceTab, label: "Поліція", icon: Phone, color: "border-l-blue-500", value: policeData.total, sub: `${policeData.patrols} патр. • ${policeData.personnel} ос.` },
-              { key: "medical" as ServiceTab, label: "Медицина", icon: Stethoscope, color: "border-l-green-500", value: medicalData.total, sub: `${medicalData.brigades} бриг. • ${medicalData.personnel} ос.` },
-            ].map(svc => (
-              <Card key={svc.key} className={`border-l-4 ${svc.color} cursor-pointer hover:shadow-lg transition-all ${activeTab === svc.key ? "ring-2 ring-primary/50 shadow-md" : ""}`}
-                onClick={() => setActiveTab(svc.key)}>
-                <CardContent className="p-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <svc.icon className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="font-bold text-[11px]">{svc.label}</span>
-                    <ChevronRight className="h-3 w-3 text-muted-foreground ml-auto" />
-                  </div>
-                  <p className="text-lg font-bold text-foreground">{svc.value}</p>
-                  <p className="text-[10px] text-muted-foreground">{svc.sub}</p>
-                </CardContent>
-              </Card>
-            ))}
+          {/* Charts row */}
+          <div className="grid md:grid-cols-2 gap-3">
+            <Card>
+              <CardHeader className="pb-2 pt-4 px-4">
+                <CardTitle className="text-xs flex items-center gap-1.5 text-muted-foreground">
+                  <Activity className="h-3.5 w-3.5" /> Динаміка за тиждень
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-2 pb-3">
+                <ResponsiveContainer width="100%" height={180}>
+                  <LineChart data={trendData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} /><Tooltip />
+                    <Line type="monotone" dataKey="інциденти" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 2 }} />
+                    <Line type="monotone" dataKey="вирішено" stroke="hsl(150,60%,45%)" strokeWidth={2} dot={{ r: 2 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2 pt-4 px-4">
+                <CardTitle className="text-xs flex items-center gap-1.5 text-muted-foreground">
+                  <BarChart3 className="h-3.5 w-3.5" /> Категорії інцидентів
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-2 pb-3 flex justify-center">
+                <ResponsiveContainer width="100%" height={180}>
+                  <PieChart>
+                    <Pie data={categoryData} cx="50%" cy="50%" innerRadius={40} outerRadius={70} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                      {categoryData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
           </div>
+
+          {/* Recent incidents */}
+          <Card>
+            <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between">
+              <CardTitle className="text-xs text-muted-foreground">Останні інциденти</CardTitle>
+              <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" onClick={() => navigate("/situation-center")}>
+                Всі <ChevronRight className="h-3 w-3" />
+              </Button>
+            </CardHeader>
+            <CardContent className="px-4 pb-3">
+              {incidentsLoading ? <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div> : (
+                <div className="space-y-1">
+                  {incidents.slice(0, 6).map(inc => {
+                    const sev = SEVERITY_CONFIG[inc.severity]; const sta = STATUS_CONFIG[inc.status];
+                    return (
+                      <div key={inc.id} className="flex items-center justify-between py-2 px-2 rounded-md hover:bg-muted/50 transition-colors">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={cn("h-2 w-2 rounded-full shrink-0", sev?.color?.replace("text-", "bg-") || "bg-muted-foreground")} />
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium truncate">{inc.title}</p>
+                            <p className="text-[10px] text-muted-foreground">{inc.regionName} • {INCIDENT_TYPE_LABELS[inc.type]}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[10px] text-muted-foreground">{inc.resources.personnel_total} ос.</span>
+                          <span className={cn("text-[9px] font-medium", sta?.color)}>{sta?.label || inc.status}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Personnel mini-table */}
+          <Card>
+            <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between">
+              <CardTitle className="text-xs text-muted-foreground">Персонал</CardTitle>
+              <Button size="sm" variant="outline" onClick={() => openPersonDialog()} className="gap-1 h-6 text-[10px]"><Plus className="h-3 w-3" />Додати</Button>
+            </CardHeader>
+            <CardContent className="px-4 pb-3">
+              {loadingPersonnel ? <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div> : personnel.length === 0 ? <p className="text-xs text-muted-foreground text-center py-4">Немає персоналу</p> : (
+                <div className="space-y-1">
+                  {personnel.slice(0, 5).map((p: any) => (
+                    <div key={p.id} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-muted/50">
+                      <div>
+                        <p className="text-xs font-medium">{p.name}</p>
+                        <p className="text-[10px] text-muted-foreground">{p.rank} • {p.department}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className={cn("text-[9px]", p.status === "На службі" ? "border-emerald-300 text-emerald-700" : "")}>{p.status}</Badge>
+                        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={(e) => { e.stopPropagation(); openPersonDialog(p); }}><Pencil className="h-2.5 w-2.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive" onClick={(e) => { e.stopPropagation(); deletePerson(p.id); }}><Trash2 className="h-2.5 w-2.5" /></Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Deficit sidebar */}
+        {/* ═══ RIGHT SIDEBAR ═══ */}
         <div className="space-y-3">
+          {/* Deficits */}
           {criticalDeficits.length > 0 ? (
-            <Card className="border-destructive/50 bg-destructive/5">
-              <CardHeader className="pb-2 pt-3 px-4">
-                <CardTitle className="text-xs flex items-center gap-2 text-destructive">
-                  <Zap className="h-3.5 w-3.5" /> Дефіцит — {criticalDeficits.length} регіон(ів)
+            <Card className="border-destructive/30 bg-destructive/5">
+              <CardHeader className="pb-1 pt-3 px-4">
+                <CardTitle className="text-xs flex items-center gap-1.5 text-destructive">
+                  <Zap className="h-3.5 w-3.5" /> Дефіцит ресурсів
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-3 space-y-2">
-                {criticalDeficits.slice(0, 4).map(d => (
-                  <div key={d.regionId} className="flex items-center gap-2 cursor-pointer rounded-md p-1 -m-1 hover:bg-destructive/10 transition-colors" onClick={() => navigateToRegion(d.regionId)}>
-                    <MapPin className="h-3 w-3 text-destructive shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-0.5">
-                        <span className="text-[11px] font-medium truncate">{d.regionName}</span>
-                        <span className="text-[9px] text-destructive">−{d.deficitPersonnel} ос.</span>
-                      </div>
-                      <Progress value={Math.max(0, 100 - d.deficitPercent)} className="h-1" />
+                {criticalDeficits.slice(0, 5).map(d => (
+                  <div key={d.regionId} className="cursor-pointer rounded-md p-2 hover:bg-destructive/10 transition-colors" onClick={() => navigateToRegion(d.regionId)}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] font-medium">{d.regionName}</span>
+                      <Badge variant="destructive" className="text-[8px]">{d.deficitPercent}%</Badge>
                     </div>
-                    <Badge variant="destructive" className="text-[8px] shrink-0">{d.deficitPercent}%</Badge>
+                    <Progress value={Math.max(0, 100 - d.deficitPercent)} className="h-1" />
+                    <p className="text-[9px] text-muted-foreground mt-0.5">−{d.deficitPersonnel} ос. • {d.activeCount} подій</p>
                   </div>
                 ))}
               </CardContent>
             </Card>
           ) : (
-            <Card className="bg-green-500/5 border-green-500/30">
+            <Card className="bg-emerald-500/5 border-emerald-500/30">
               <CardContent className="p-4 text-center">
-                <ShieldCheck className="h-5 w-5 text-green-600 mx-auto mb-1" />
-                <p className="text-xs font-medium text-green-700">Ресурси в нормі</p>
-                <p className="text-[10px] text-muted-foreground">Дефіцитів не виявлено</p>
+                <ShieldCheck className="h-5 w-5 text-emerald-600 mx-auto mb-1" />
+                <p className="text-xs font-medium text-emerald-700">Ресурси в нормі</p>
               </CardContent>
             </Card>
           )}
 
-          {/* Quick recommendations */}
+          {/* Recommendations */}
           {recommendations.length > 0 && (
             <Card>
               <CardHeader className="pb-1 pt-3 px-4">
-                <CardTitle className="text-xs flex items-center gap-1.5">
-                  <ArrowRightLeft className="h-3.5 w-3.5 text-primary" /> Рекомендації
+                <CardTitle className="text-xs flex items-center gap-1.5 text-muted-foreground">
+                  <ArrowRightLeft className="h-3.5 w-3.5" /> Перерозподіл
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-3 space-y-1.5">
-                {recommendations.slice(0, 3).map((rec, i) => (
-                  <div key={i} className="text-[10px] text-muted-foreground p-1.5 rounded bg-muted/50">
-                    <span className="text-green-600 font-medium">{rec.fromName}</span>
-                    <span className="mx-1">→</span>
+                {recommendations.slice(0, 4).map((rec, i) => (
+                  <div key={i} className="text-[10px] p-2 rounded bg-muted/50">
+                    <span className="text-emerald-600 font-medium">{rec.fromName}</span>
+                    <span className="mx-1 text-muted-foreground">→</span>
                     <span className="text-destructive font-medium">{rec.toName}</span>
-                    <span className="ml-1">({rec.personnel} ос.)</span>
+                    <p className="text-muted-foreground">{rec.personnel} ос. • {rec.reason}</p>
                   </div>
                 ))}
               </CardContent>
             </Card>
           )}
+
+          {/* Resources table */}
+          <Card>
+            <CardHeader className="pb-1 pt-3 px-4">
+              <CardTitle className="text-xs flex items-center gap-1.5 text-muted-foreground">
+                <MapPin className="h-3.5 w-3.5" /> Ресурси по регіонам
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-3 pb-3">
+              <ScrollArea className="max-h-[300px]">
+                {regionDeficits.length === 0 ? <p className="text-xs text-muted-foreground text-center py-4">Немає активних</p> : (
+                  <div className="space-y-1">
+                    {regionDeficits.sort((a, b) => b.deficitPercent - a.deficitPercent).slice(0, 10).map(d => (
+                      <div key={d.regionId} className="flex items-center justify-between py-1.5 px-1 rounded hover:bg-muted/50 cursor-pointer text-[10px]" onClick={() => navigateToRegion(d.regionId)}>
+                        <span className="font-medium">{d.regionName}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">{d.currentPersonnel}/{d.requiredPersonnel}</span>
+                          {d.surplus ? <span className="text-emerald-600 text-[9px]">✓</span> : d.deficitPercent > 30 ? <span className="text-destructive text-[9px]">−{d.deficitPercent}%</span> : <span className="text-emerald-600 text-[9px]">✓</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+            </CardContent>
+          </Card>
         </div>
       </div>
 
-      {/* ═══ MAIN TABS ═══ */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ServiceTab)} className="w-full">
-        <div className="flex flex-wrap gap-1.5 mb-4 border-b border-border pb-3">
-          {[
-            { value: "overview", label: "Огляд", icon: BarChart3 },
-            { value: "ses", label: "ДСНС", icon: Flame },
-            { value: "ngu", label: "НГУ", icon: Shield },
-            { value: "police", label: "НПУ", icon: Phone },
-            { value: "medical", label: "ЕМД", icon: Stethoscope },
-            { value: "resources", label: "Ресурси", icon: ArrowRightLeft },
-            { value: "incidents", label: "Журнал", icon: AlertTriangle },
-            { value: "personnel", label: "Персонал", icon: Users },
-            { value: "analytics", label: "Аналітика", icon: Activity },
-          ].map(tab => (
-            <Button
-              key={tab.value}
-              variant={activeTab === tab.value ? "default" : "ghost"}
-              size="sm"
-              className={cn("gap-1.5 h-8 text-[11px]", activeTab === tab.value && "shadow-sm")}
-              onClick={() => setActiveTab(tab.value as ServiceTab)}
-            >
-              <tab.icon className="h-3.5 w-3.5" />
-              {tab.label}
-            </Button>
-          ))}
-        </div>
-
-        {/* ═══════ OVERVIEW ═══════ */}
-        <TabsContent value="overview" className="space-y-4 mt-4" ref={tabContentRef}>
-          <RegionFilterBar />
-          <div className="grid lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><BarChart3 className="h-4 w-4 text-primary" />Інциденти за місяцями</CardTitle></CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={monthlyData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} /><Tooltip />
-                    <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Activity className="h-4 w-4 text-primary" />Тижнева динаміка</CardTitle></CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={trendData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} /><Tooltip />
-                    <Line type="monotone" dataKey="incidents" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} name="Інциденти" />
-                    <Line type="monotone" dataKey="resolved" stroke="hsl(150, 60%, 45%)" strokeWidth={2} dot={{ r: 3 }} name="Вирішено" />
-                  </LineChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm">Останні інциденти</CardTitle></CardHeader>
-            <CardContent>
-              {incidentsLoading ? <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
-                : <div className="space-y-1.5">{incidents.slice(0, 5).map(inc => {
-                  const sev = SEVERITY_CONFIG[inc.severity]; const sta = STATUS_CONFIG[inc.status];
-                  return (<div key={inc.id} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className={`h-2 w-2 rounded-full shrink-0 ${sev?.color?.replace("text-", "bg-") || "bg-muted-foreground"}`} />
-                      <div className="min-w-0"><span className="font-medium text-xs block truncate">{inc.title}</span><span className="text-muted-foreground text-[11px]">{inc.regionName} • {INCIDENT_TYPE_LABELS[inc.type]}</span></div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0"><span className="text-[10px] text-muted-foreground">{inc.resources.personnel_total} ос.</span><Badge variant="outline" className="text-[9px]">{sta?.label || inc.status}</Badge></div>
-                  </div>);
-                })}</div>}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ═══════ ДСНС ═══════ */}
-        <TabsContent value="ses" className="space-y-4 mt-4">
-          <RegionFilterBar />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatCard label="Інцидентів" value={sesData.total} icon={Flame} />
-            <StatCard label="Пожеж" value={sesData.fires} icon={Flame} sub="ліквідація" />
-            <StatCard label="Підрозділів" value={sesData.units} icon={Truck} sub={`резерв: ${sesData.reserveUnits}`} />
-            <StatCard label="Врятовано" value={sesData.rescued} icon={Heart} />
-            <StatCard label="Особовий склад" value={sesData.personnel} icon={Users} />
-            <StatCard label="Піротехніка" value={sesData.eod} icon={Target} sub={`${sesData.eodArea.toFixed(1)} км² обстежено`} />
-            <StatCard label="Сер. час реагування" value={`${sesData.avgResponseMin} хв`} icon={Clock} />
-            <StatCard label="Постраждалих" value={sesData.injured} icon={AlertTriangle} />
-          </div>
-
-          {/* Heatmap chart */}
-          {sesData.heatmapData.length > 0 && (
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Flame className="h-4 w-4 text-destructive" />Теплова карта НС по регіонам</CardTitle></CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={sesData.heatmapData} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis type="number" tick={{ fontSize: 10 }} /><YAxis dataKey="name" type="category" width={70} tick={{ fontSize: 9 }} /><Tooltip />
-                    <Bar dataKey="пожежі" fill="hsl(0, 84%, 60%)" stackId="a" />
-                    <Bar dataKey="НС" fill="hsl(24, 95%, 53%)" stackId="a" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+      {/* ═══ SERVICE DETAIL DIALOG ═══ */}
+      <Dialog open={!!serviceDialog} onOpenChange={(o) => !o && setServiceDialog(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          {serviceDialog === "ses" && (
+            <>
+              <DialogHeader><DialogTitle className="flex items-center gap-2"><Flame className="h-5 w-5 text-red-500" /> ДСНС — Детальна аналітика</DialogTitle></DialogHeader>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+                {[{ l: "Інцидентів", v: serviceStats.ses.total }, { l: "Пожеж", v: serviceStats.ses.fires }, { l: "Підрозділів", v: serviceStats.ses.units }, { l: "Врятовано", v: serviceStats.ses.rescued }, { l: "Особовий склад", v: serviceStats.ses.personnel }, { l: "Піротехніка", v: serviceStats.ses.eod }, { l: "Сер. реагування", v: `${serviceStats.ses.avgResponse} хв` }, { l: "Резерв техніки", v: serviceStats.ses.reserve }].map(s => (
+                  <div key={s.l} className="bg-muted/50 rounded-lg p-3"><p className="text-lg font-bold">{s.v}</p><p className="text-[10px] text-muted-foreground">{s.l}</p></div>
+                ))}
+              </div>
+              {serviceStats.ses.equipment.length > 0 && <div className="mt-3"><p className="text-xs font-medium mb-1.5">Спецтехніка на озброєнні</p><div className="flex flex-wrap gap-1">{serviceStats.ses.equipment.map((eq, i) => <Badge key={i} variant="outline" className="text-[10px]">{eq}</Badge>)}</div></div>}
+              {serviceStats.ses.byRegion.length > 0 && <div className="mt-3"><p className="text-xs font-medium mb-1.5">По регіонам</p><table className="w-full text-xs"><thead><tr className="border-b">{["Регіон", "Подій", "Підр.", "Особ.", "Врятовано"].map(h => <th key={h} className="text-left py-1.5 text-muted-foreground font-medium">{h}</th>)}</tr></thead><tbody>{serviceStats.ses.byRegion.slice(0, 8).map((r, i) => <tr key={i} className="border-b border-border/50"><td className="py-1.5">{r.region}</td><td>{r.incidents}</td><td>{r.units}</td><td>{r.personnel}</td><td>{r.rescued}</td></tr>)}</tbody></table></div>}
+            </>
           )}
-
-          {sesData.equipment.length > 0 && (
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground" />Спецтехніка на озброєнні</CardTitle></CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-1.5">{sesData.equipment.map((eq, i) => <Badge key={i} variant="outline" className="text-[11px]">{eq}</Badge>)}</div>
-              </CardContent>
-            </Card>
+          {serviceDialog === "ngu" && (
+            <>
+              <DialogHeader><DialogTitle className="flex items-center gap-2"><Shield className="h-5 w-5 text-slate-600" /> Національна гвардія — Детальна аналітика</DialogTitle></DialogHeader>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+                {[{ l: "Операцій", v: serviceStats.ngu.total }, { l: "Особовий склад", v: serviceStats.ngu.personnel }, { l: "Спецпідрозділів", v: serviceStats.ngu.specialUnits }, { l: "Техніки", v: serviceStats.ngu.vehicles }, { l: "Спільне патрулювання", v: serviceStats.ngu.patrol }, { l: "Крит. інфраструктура", v: serviceStats.ngu.critInfra }, { l: "Готовність", v: `${serviceStats.ngu.readiness}%` }].map(s => (
+                  <div key={s.l} className="bg-muted/50 rounded-lg p-3"><p className="text-lg font-bold">{s.v}</p><p className="text-[10px] text-muted-foreground">{s.l}</p></div>
+                ))}
+              </div>
+              <div className="mt-3"><p className="text-xs font-medium mb-1.5">Діаграма готовності</p>
+                <ResponsiveContainer width="100%" height={250}><RadarChart cx="50%" cy="50%" outerRadius="70%" data={serviceStats.ngu.readinessData}><PolarGrid stroke="hsl(var(--border))" /><PolarAngleAxis dataKey="subject" tick={{ fontSize: 10 }} /><PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 9 }} /><Radar name="Готовність" dataKey="value" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.3} /></RadarChart></ResponsiveContainer>
+              </div>
+            </>
           )}
-
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm">Розподіл по регіонам</CardTitle></CardHeader>
-            <CardContent>
-              <RegionTable data={sesData.byRegion} columns={[{ key: "region", label: "Регіон" }, { key: "incidents", label: "Інцидентів" }, { key: "units", label: "Підрозділів" }, { key: "personnel", label: "Особ. склад" }, { key: "rescued", label: "Врятовано" }]} />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ═══════ НГУ ═══════ */}
-        <TabsContent value="ngu" className="space-y-4 mt-4">
-          <RegionFilterBar />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatCard label="Операцій" value={nguData.total} icon={Shield} />
-            <StatCard label="Особовий склад" value={nguData.personnel} icon={Users} />
-            <StatCard label="Спільне патрулювання" value={nguData.patrolJoint} icon={Eye} sub="з НПУ" />
-            <StatCard label="Крит. інфраструктура" value={nguData.critInfra} icon={Building2} />
-            <StatCard label="Спецпідрозділів" value={nguData.specialUnits} icon={Sword} />
-            <StatCard label="Техніки активно" value={nguData.vehiclesActive} icon={Truck} />
-            <StatCard label="Інциденти на об'єктах" value={nguData.infraIncidents} icon={ShieldAlert} />
-            <StatCard label="Готовність (%)" value={`${nguData.readinessPercent}%`} icon={Target} />
-          </div>
-
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Target className="h-4 w-4 text-muted-foreground" />Діаграма готовності підрозділів</CardTitle></CardHeader>
-            <CardContent className="flex justify-center">
-              <ResponsiveContainer width="100%" height={280}>
-                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={nguData.readinessData}>
-                  <PolarGrid stroke="hsl(var(--border))" />
-                  <PolarAngleAxis dataKey="subject" tick={{ fontSize: 10 }} />
-                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 9 }} />
-                  <Radar name="Готовність" dataKey="value" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.3} />
-                </RadarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm">Розподіл по регіонам</CardTitle></CardHeader>
-            <CardContent>
-              <RegionTable data={nguData.byRegion} columns={[{ key: "region", label: "Регіон" }, { key: "incidents", label: "Операцій" }, { key: "personnel", label: "Особ. склад" }]} />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ═══════ ПОЛІЦІЯ ═══════ */}
-        <TabsContent value="police" className="space-y-4 mt-4">
-          <RegionFilterBar />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatCard label="Інцидентів НПУ" value={policeData.total} icon={Phone} />
-            <StatCard label="Кримінальних подій" value={policeData.crimes} icon={Crosshair} />
-            <StatCard label="Патрулів залучено" value={policeData.patrols} icon={Radio} />
-            <StatCard label="Затримань" value={policeData.arrests} icon={ShieldCheck} />
-            <StatCard label="Особовий склад" value={policeData.personnel} icon={Users} />
-            <StatCard label="Критичних подій" value={policeData.critical} icon={AlertTriangle} />
-            <StatCard label="Розкриття (%)" value={`${policeData.resolvedRate}%`} icon={Target} sub="по гарячих слідах" />
-            <StatCard label="Сер. час прибуття" value={`${policeData.avgArrivalMin} хв`} icon={Clock} />
-          </div>
-
-          <div className="grid lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Виклики 102 за категоріями</CardTitle></CardHeader>
-              <CardContent className="flex justify-center">
-                <ResponsiveContainer width="100%" height={220}>
-                  <PieChart>
-                    <Pie data={policeData.callCategories} cx="50%" cy="50%" innerRadius={45} outerRadius={80} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                      {policeData.callCategories.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Статус екіпажів</CardTitle></CardHeader>
-              <CardContent className="flex justify-center">
-                <ResponsiveContainer width="100%" height={220}>
-                  <PieChart>
-                    <Pie data={policeData.patrolStatus} cx="50%" cy="50%" innerRadius={45} outerRadius={80} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
-                      <Cell fill="hsl(24, 95%, 53%)" /><Cell fill="hsl(150, 60%, 45%)" /><Cell fill="hsl(200, 70%, 50%)" />
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm">Розподіл по регіонам</CardTitle></CardHeader>
-            <CardContent>
-              <RegionTable data={policeData.byRegion} columns={[{ key: "region", label: "Регіон" }, { key: "incidents", label: "Інцидентів" }, { key: "patrols", label: "Патрулів" }, { key: "personnel", label: "Особ. склад" }, { key: "crimes", label: "Кримінальних" }]} />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ═══════ МЕДИЦИНА / ЕМД ═══════ */}
-        <TabsContent value="medical" className="space-y-4 mt-4">
-          <RegionFilterBar />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatCard label="Активних подій" value={medicalData.total} icon={Stethoscope} />
-            <StatCard label="Бригад залучено" value={medicalData.brigades} icon={Ambulance} sub={`вільних: ${medicalData.freeBrigades}`} />
-            <StatCard label="Постраждалих" value={medicalData.injured} icon={Heart} />
-            <StatCard label="Загиблих" value={medicalData.fatalities} icon={AlertTriangle} />
-            <StatCard label="Врятовано" value={medicalData.rescued} icon={TrendingUp} />
-            <StatCard label="Особовий склад" value={medicalData.personnel} icon={Users} />
-          </div>
-
-          {/* Hospital load */}
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Building2 className="h-4 w-4 text-muted-foreground" />Завантаженість лікарень</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              {medicalData.hospitalLoad.map(h => (
-                <div key={h.name}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium">{h.name}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">{h.load}%</span>
-                      <span className={`h-2.5 w-2.5 rounded-full ${h.status === "critical" ? "bg-red-500" : h.status === "warning" ? "bg-yellow-500" : "bg-green-500"}`} />
-                    </div>
+          {serviceDialog === "police" && (
+            <>
+              <DialogHeader><DialogTitle className="flex items-center gap-2"><Phone className="h-5 w-5 text-blue-500" /> Національна поліція — Детальна аналітика</DialogTitle></DialogHeader>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+                {[{ l: "Інцидентів", v: serviceStats.police.total }, { l: "Кримінальних", v: serviceStats.police.crimes }, { l: "Патрулів", v: serviceStats.police.patrols }, { l: "Затримань", v: serviceStats.police.arrests }, { l: "Особовий склад", v: serviceStats.police.personnel }, { l: "Розкриття", v: `${serviceStats.police.resolvedRate}%` }, { l: "Сер. прибуття", v: `${serviceStats.police.avgArrival} хв` }].map(s => (
+                  <div key={s.l} className="bg-muted/50 rounded-lg p-3"><p className="text-lg font-bold">{s.v}</p><p className="text-[10px] text-muted-foreground">{s.l}</p></div>
+                ))}
+              </div>
+              <div className="grid md:grid-cols-2 gap-3 mt-3">
+                <div><p className="text-xs font-medium mb-1.5">Виклики 102</p><ResponsiveContainer width="100%" height={180}><PieChart><Pie data={serviceStats.police.callCategories} cx="50%" cy="50%" innerRadius={35} outerRadius={65} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>{serviceStats.police.callCategories.map((_, i) => <Cell key={i} fill={CHART_COLORS[i]} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer></div>
+                <div><p className="text-xs font-medium mb-1.5">Статус екіпажів</p><ResponsiveContainer width="100%" height={180}><PieChart><Pie data={serviceStats.police.patrolStatus} cx="50%" cy="50%" innerRadius={35} outerRadius={65} dataKey="value" label={({ name, value }) => `${name}: ${value}`}><Cell fill="hsl(24,95%,53%)" /><Cell fill="hsl(150,60%,45%)" /><Cell fill="hsl(200,70%,50%)" /></Pie><Tooltip /></PieChart></ResponsiveContainer></div>
+              </div>
+            </>
+          )}
+          {serviceDialog === "medical" && (
+            <>
+              <DialogHeader><DialogTitle className="flex items-center gap-2"><Stethoscope className="h-5 w-5 text-emerald-500" /> Медична служба — Детальна аналітика</DialogTitle></DialogHeader>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+                {[{ l: "Подій", v: serviceStats.medical.total }, { l: "Бригад", v: serviceStats.medical.brigades }, { l: "Вільних бригад", v: serviceStats.medical.freeBrigades }, { l: "Постраждалих", v: serviceStats.medical.injured }, { l: "Загиблих", v: serviceStats.medical.fatalities }, { l: "Врятовано", v: serviceStats.medical.rescued }].map(s => (
+                  <div key={s.l} className="bg-muted/50 rounded-lg p-3"><p className="text-lg font-bold">{s.v}</p><p className="text-[10px] text-muted-foreground">{s.l}</p></div>
+                ))}
+              </div>
+              <div className="mt-3"><p className="text-xs font-medium mb-2">Завантаженість лікарень</p><div className="space-y-2">
+                {serviceStats.medical.hospitalLoad.map(h => (
+                  <div key={h.name} className="flex items-center gap-3">
+                    <span className="text-xs w-28">{h.name}</span>
+                    <Progress value={h.load} className={cn("flex-1 h-2", h.status === "critical" ? "[&>div]:bg-destructive" : h.status === "warning" ? "[&>div]:bg-orange-500" : "[&>div]:bg-emerald-500")} />
+                    <span className={cn("text-xs font-medium w-10 text-right", h.status === "critical" ? "text-destructive" : h.status === "warning" ? "text-orange-500" : "text-emerald-600")}>{h.load}%</span>
                   </div>
-                  <Progress value={h.load} className={`h-2 ${h.status === "critical" ? "[&>div]:bg-red-500" : h.status === "warning" ? "[&>div]:bg-yellow-500" : ""}`} />
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <div className="grid lg:grid-cols-2 gap-4">
-            {/* Blood supply */}
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Droplets className="h-4 w-4 text-destructive" />Запаси донорської крові</CardTitle></CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={medicalData.bloodSupply}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="group" tick={{ fontSize: 10 }} /><YAxis domain={[0, 100]} tick={{ fontSize: 10 }} /><Tooltip />
-                    <Bar dataKey="level" radius={[4, 4, 0, 0]}>
-                      {medicalData.bloodSupply.map((b, i) => <Cell key={i} fill={b.level < 40 ? "hsl(0, 84%, 60%)" : b.level < 60 ? "hsl(45, 93%, 47%)" : "hsl(150, 60%, 45%)"} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-            {/* EMD calls */}
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Ambulance className="h-4 w-4 text-muted-foreground" />Виклики ЕМД</CardTitle></CardHeader>
-              <CardContent className="flex justify-center">
-                <ResponsiveContainer width="100%" height={200}>
-                  <PieChart>
-                    <Pie data={medicalData.emdCalls} cx="50%" cy="50%" innerRadius={40} outerRadius={70} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
-                      <Cell fill="hsl(0, 84%, 60%)" /><Cell fill="hsl(200, 70%, 50%)" />
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm">Розподіл по регіонам</CardTitle></CardHeader>
-            <CardContent>
-              <RegionTable data={medicalData.byRegion} columns={[{ key: "region", label: "Регіон" }, { key: "incidents", label: "Подій" }, { key: "brigades", label: "Бригад" }, { key: "injured", label: "Постраждалих" }, { key: "rescued", label: "Врятовано" }, { key: "fatalities", label: "Загиблих" }]} />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ═══════ RESOURCES ═══════ */}
-        <TabsContent value="resources" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><MapPin className="h-4 w-4 text-primary" />Аналіз ресурсів по регіонам</CardTitle></CardHeader>
-            <CardContent>
-              {regionDeficits.length === 0 ? <p className="text-sm text-muted-foreground text-center py-8">Немає активних інцидентів</p> : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead><tr className="border-b border-border">
-                      {["Регіон", "Активних", "Крит.", "Персонал", "Підрозділів", "Статус"].map(h => <th key={h} className="text-left py-2 text-muted-foreground font-medium text-xs">{h}</th>)}
-                    </tr></thead>
-                    <tbody>{regionDeficits.sort((a, b) => b.deficitPercent - a.deficitPercent).map(d => (
-                      <tr key={d.regionId} className="border-b border-border/50 hover:bg-muted/50 cursor-pointer transition-colors" onClick={() => navigateToRegion(d.regionId)}>
-                        <td className="py-2 text-xs font-medium text-primary underline-offset-2 hover:underline">{d.regionName}</td>
-                        <td className="py-2 text-xs">{d.activeCount}</td>
-                        <td className="py-2 text-xs">{d.criticalCount > 0 ? <Badge variant="destructive" className="text-[9px]">{d.criticalCount}</Badge> : "—"}</td>
-                        <td className="py-2 text-xs"><span className={d.deficitPersonnel > 0 ? "text-destructive font-medium" : ""}>{d.currentPersonnel}/{d.requiredPersonnel}</span></td>
-                        <td className="py-2 text-xs"><span className={d.deficitUnits > 0 ? "text-destructive font-medium" : ""}>{d.currentUnits}/{d.requiredUnits}</span></td>
-                        <td className="py-2 text-xs">{d.surplus ? <Badge className="bg-green-500/10 text-green-600 border-green-500/30 text-[9px]">Надлишок</Badge> : d.deficitPercent > 30 ? <Badge variant="destructive" className="text-[9px]">Дефіцит {d.deficitPercent}%</Badge> : <Badge className="bg-green-500/10 text-green-600 border-green-500/30 text-[9px]">Норма</Badge>}</td>
-                      </tr>
-                    ))}</tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><ArrowRightLeft className="h-4 w-4 text-primary" />Рекомендації щодо перерозподілу</CardTitle></CardHeader>
-            <CardContent>
-              {recommendations.length === 0 ? <p className="text-sm text-muted-foreground text-center py-6">Ресурси розподілені оптимально</p> : (
-                <div className="space-y-2">{recommendations.map((rec, i) => (
-                  <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border border-border/50">
-                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0"><ArrowRightLeft className="h-4 w-4 text-primary" /></div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs"><span className="font-medium text-green-600">{rec.fromName}</span><span className="text-muted-foreground mx-1.5">→</span><span className="font-medium text-destructive">{rec.toName}</span></p>
-                      <p className="text-[10px] text-muted-foreground">{rec.personnel} осіб{rec.units > 0 ? `, ${rec.units} підрозділів` : ""} • {rec.reason}</p>
-                    </div>
-                  </div>
-                ))}</div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ═══════ INCIDENTS ═══════ */}
-        <TabsContent value="incidents" className="mt-4">
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm">Журнал інцидентів</CardTitle></CardHeader>
-            <CardContent>
-              {incidentsLoading ? <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
-                : incidents.length === 0 ? <p className="text-sm text-muted-foreground text-center py-8">Немає інцидентів</p>
-                : <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead><tr className="border-b border-border">
-                      {["Назва", "Регіон", "Тип", "Рівень", "Ресурси", "Статус"].map(h => <th key={h} className="text-left py-2 text-muted-foreground font-medium text-xs">{h}</th>)}
-                    </tr></thead>
-                    <tbody>{incidents.map(inc => {
-                      const sev = SEVERITY_CONFIG[inc.severity] || { label: inc.severity, bgColor: "bg-muted" };
-                      const sta = STATUS_CONFIG[inc.status] || { label: inc.status, color: "text-muted-foreground" };
-                      return (<tr key={inc.id} className="border-b border-border/50 hover:bg-muted/50">
-                        <td className="py-2 text-xs font-medium max-w-[180px] truncate">{inc.title}</td>
-                        <td className="py-2 text-xs text-muted-foreground">{inc.regionName}</td>
-                        <td className="py-2 text-xs text-muted-foreground">{INCIDENT_TYPE_LABELS[inc.type]}</td>
-                        <td className="py-2"><Badge variant="outline" className={`text-[9px] ${sev.bgColor}`}>{sev.label}</Badge></td>
-                        <td className="py-2 text-xs text-muted-foreground">{inc.resources.personnel_total} ос.</td>
-                        <td className="py-2"><span className={`text-[10px] font-medium ${sta.color}`}>{sta.label}</span></td>
-                      </tr>);
-                    })}</tbody>
-                  </table>
-                </div>}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ═══════ PERSONNEL ═══════ */}
-        <TabsContent value="personnel" className="mt-4">
-          <Card>
-            <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm">Список персоналу</CardTitle>
-              <Button size="sm" onClick={() => openPersonDialog()} className="gap-1 h-8 text-xs"><Plus className="h-3.5 w-3.5" />Додати</Button>
-            </CardHeader>
-            <CardContent>
-              {loadingPersonnel ? <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
-                : personnel.length === 0 ? <p className="text-sm text-muted-foreground text-center py-8">Немає персоналу.</p>
-                : <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead><tr className="border-b border-border">
-                      {["ПІБ", "Звання", "Відділ", "Статус", "Дії"].map(h => <th key={h} className={`py-2 text-muted-foreground font-medium text-xs ${h === "Дії" ? "text-right" : "text-left"}`}>{h}</th>)}
-                    </tr></thead>
-                    <tbody>{personnel.map((p: any) => (
-                      <tr key={p.id} className="border-b border-border/50 hover:bg-muted/50">
-                        <td className="py-2 text-xs font-medium">{p.name}</td>
-                        <td className="py-2 text-xs text-muted-foreground">{p.rank}</td>
-                        <td className="py-2 text-xs text-muted-foreground">{p.department}</td>
-                        <td className="py-2"><span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium ${p.status === "На службі" ? "bg-green-100 text-green-700" : "bg-secondary text-secondary-foreground"}`}>{p.status}</span></td>
-                        <td className="py-2 text-right"><div className="flex gap-1 justify-end">
-                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openPersonDialog(p)}><Pencil className="h-3 w-3" /></Button>
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => deletePerson(p.id)}><Trash2 className="h-3 w-3" /></Button>
-                        </div></td>
-                      </tr>
-                    ))}</tbody>
-                  </table>
-                </div>}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ═══════ ANALYTICS ═══════ */}
-        <TabsContent value="analytics" className="space-y-4 mt-4">
-          <div className="grid lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Категорії інцидентів</CardTitle></CardHeader>
-              <CardContent className="flex justify-center">
-                <ResponsiveContainer width="100%" height={220}>
-                  <PieChart>
-                    <Pie data={categoryData} cx="50%" cy="50%" innerRadius={45} outerRadius={80} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                      {categoryData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-                    </Pie><Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">За рівнем загрози</CardTitle></CardHeader>
-              <CardContent className="flex justify-center">
-                <ResponsiveContainer width="100%" height={220}>
-                  <PieChart>
-                    <Pie data={severityData} cx="50%" cy="50%" innerRadius={45} outerRadius={80} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                      {severityData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-                    </Pie><Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-      </Tabs>
+                ))}
+              </div></div>
+              <div className="mt-3"><p className="text-xs font-medium mb-1.5">Запаси крові</p><ResponsiveContainer width="100%" height={160}><BarChart data={serviceStats.medical.bloodSupply}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" /><XAxis dataKey="group" tick={{ fontSize: 10 }} /><YAxis domain={[0, 100]} tick={{ fontSize: 10 }} /><Tooltip /><Bar dataKey="level" radius={[4, 4, 0, 0]}>{serviceStats.medical.bloodSupply.map((b, i) => <Cell key={i} fill={b.level < 40 ? "hsl(0,84%,60%)" : b.level < 60 ? "hsl(45,93%,47%)" : "hsl(150,60%,45%)"} />)}</Bar></BarChart></ResponsiveContainer></div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Personnel Dialog */}
       <Dialog open={personDialogOpen} onOpenChange={setPersonDialogOpen}>
