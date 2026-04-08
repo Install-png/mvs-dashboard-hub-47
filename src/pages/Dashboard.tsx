@@ -36,6 +36,13 @@ import {
 } from "recharts";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { CYRILLIC_FONT } from "@/lib/cyrillic-font";
+
+function setupCyrillicPdf(pdf: jsPDF) {
+  pdf.addFileToVFS("Roboto-Regular.ttf", CYRILLIC_FONT);
+  pdf.addFont("Roboto-Regular.ttf", "Roboto", "normal");
+  pdf.setFont("Roboto");
+}
 
 const CHART_COLORS = ["hsl(24,95%,53%)", "hsl(200,70%,50%)", "hsl(150,60%,45%)", "hsl(280,60%,55%)", "hsl(340,70%,55%)", "hsl(30,100%,75%)"];
 const MONTH_NAMES = ["Січ", "Лют", "Бер", "Кві", "Тра", "Чер", "Лип", "Сер", "Вер", "Жов", "Лис", "Гру"];
@@ -341,13 +348,13 @@ const Dashboard = () => {
       {/* ═══ KPI ROW ═══ */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
-          { label: "Активні", value: kpis.active, icon: AlertTriangle, accent: "text-destructive", bg: "bg-destructive/10" },
-          { label: "За добу", value: kpis.todayCount, icon: Clock, accent: "text-orange-500", bg: "bg-orange-500/10" },
-          { label: "Персонал", value: kpis.totalPersonnel, icon: Users, accent: "text-primary", bg: "bg-primary/10" },
-          { label: "Врятовано", value: kpis.rescued, icon: Heart, accent: "text-emerald-600", bg: "bg-emerald-500/10" },
-          { label: "Вирішення", value: `${kpis.rate}%`, icon: TrendingUp, accent: "text-primary", bg: "bg-primary/10" },
+          { label: "Активні", value: kpis.active, icon: AlertTriangle, accent: "text-destructive", bg: "bg-destructive/10", pulse: newIncidentIds.size > 0 },
+          { label: "За добу", value: kpis.todayCount, icon: Clock, accent: "text-orange-500", bg: "bg-orange-500/10", pulse: false },
+          { label: "Персонал", value: kpis.totalPersonnel, icon: Users, accent: "text-primary", bg: "bg-primary/10", pulse: false },
+          { label: "Врятовано", value: kpis.rescued, icon: Heart, accent: "text-emerald-600", bg: "bg-emerald-500/10", pulse: false },
+          { label: "Вирішення", value: `${kpis.rate}%`, icon: TrendingUp, accent: "text-primary", bg: "bg-primary/10", pulse: false },
         ].map(k => (
-          <Card key={k.label}>
+          <Card key={k.label} className={cn(k.pulse && "animate-card-pulse-new")}>
             <CardContent className="p-3 flex items-center gap-3">
               <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center shrink-0", k.bg)}>
                 <k.icon className={cn("h-4 w-4", k.accent)} />
