@@ -95,7 +95,7 @@ const Dashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { incidents, loading: incidentsLoading, setSelectedRegion } = useIncidentStore();
+  const { incidents, loading: incidentsLoading, setSelectedRegion, newIncidentIds, updatedIncidentIds } = useIncidentStore();
   useIncidents();
 
   const [regionFilter, setRegionFilter] = useState("all");
