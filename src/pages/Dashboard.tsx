@@ -294,16 +294,16 @@ const Dashboard = () => {
     y = (pdf as any).lastAutoTable.finalY + 6;
 
     if (regionDeficits.length > 0) {
-      pdf.setFontSize(11); pdf.setFont("helvetica", "bold"); pdf.text("РЕСУРСИ ПО РЕГІОНАМ", 14, y); y += 4;
-      autoTable(pdf, { startY: y, head: [["Регіон", "Активних", "Крит.", "Персонал", "Статус"]], body: regionDeficits.slice(0, 12).map(d => [d.regionName, String(d.activeCount), String(d.criticalCount), `${d.currentPersonnel}/${d.requiredPersonnel}`, d.surplus ? "Надлишок" : d.deficitPercent > 30 ? `Дефіцит ${d.deficitPercent}%` : "Норма"]), theme: "striped", headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 7 }, bodyStyles: { fontSize: 7 } });
+      pdf.setFontSize(11); pdf.text("РЕСУРСИ ПО РЕГІОНАМ", 14, y); y += 4;
+      autoTable(pdf, { startY: y, head: [["Регіон", "Активних", "Крит.", "Персонал", "Статус"]], body: regionDeficits.slice(0, 12).map(d => [d.regionName, String(d.activeCount), String(d.criticalCount), `${d.currentPersonnel}/${d.requiredPersonnel}`, d.surplus ? "Надлишок" : d.deficitPercent > 30 ? `Дефіцит ${d.deficitPercent}%` : "Норма"]), theme: "striped", styles: { font: "Roboto" }, headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 7 }, bodyStyles: { fontSize: 7 } });
       y = (pdf as any).lastAutoTable.finalY + 6;
     }
 
     const relevantIncs = regionFilter === "all" ? incidents : incidents.filter(i => i.region === regionFilter);
     if (relevantIncs.length > 0) {
       if (y > 230) { pdf.addPage(); y = 15; }
-      pdf.setFontSize(11); pdf.setFont("helvetica", "bold"); pdf.text("РЕЄСТР ІНЦИДЕНТІВ", 14, y); y += 4;
-      autoTable(pdf, { startY: y, head: [["Час", "Регіон", "Тип", "Назва", "Ос.скл.", "Р/П/З"]], body: relevantIncs.sort((a, b) => b.risk_level - a.risk_level).slice(0, 30).map(inc => [format(new Date(inc.timestamp), "HH:mm"), inc.regionName, INCIDENT_TYPE_LABELS[inc.type] || inc.type, inc.title.substring(0, 35), String(inc.resources.personnel_total), `${inc.impact.rescued}/${inc.impact.injured}/${inc.impact.fatalities}`]), theme: "striped", headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 7 }, bodyStyles: { fontSize: 7 } });
+      pdf.setFontSize(11); pdf.text("РЕЄСТР ІНЦИДЕНТІВ", 14, y); y += 4;
+      autoTable(pdf, { startY: y, head: [["Час", "Регіон", "Тип", "Назва", "Ос.скл.", "Р/П/З"]], body: relevantIncs.sort((a, b) => b.risk_level - a.risk_level).slice(0, 30).map(inc => [format(new Date(inc.timestamp), "HH:mm"), inc.regionName, INCIDENT_TYPE_LABELS[inc.type] || inc.type, inc.title.substring(0, 35), String(inc.resources.personnel_total), `${inc.impact.rescued}/${inc.impact.injured}/${inc.impact.fatalities}`]), theme: "striped", styles: { font: "Roboto" }, headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 7 }, bodyStyles: { fontSize: 7 } });
     }
 
     const totalPages = pdf.getNumberOfPages();
