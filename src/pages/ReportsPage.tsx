@@ -14,6 +14,14 @@ import { REGION_NAME_MAP } from "@/components/UkraineMap";
 import { FileBarChart, Download, Loader2, Trash2 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { CYRILLIC_FONT } from "@/lib/cyrillic-font";
+import { useEffect } from "react";
+
+function setupCyrillicPdf(pdf: jsPDF) {
+  pdf.addFileToVFS("Roboto-Regular.ttf", CYRILLIC_FONT);
+  pdf.addFont("Roboto-Regular.ttf", "Roboto", "normal");
+  pdf.setFont("Roboto");
+}
 import { useEffect } from "react";
 
 function safeDate(v: any): Date {
@@ -89,18 +97,15 @@ const ReportsPage = () => {
 
     // Generate PDF with incident data + calendar data
     const pdf = new jsPDF("p", "mm", "a4");
+    setupCyrillicPdf(pdf);
     const pageW = pdf.internal.pageSize.getWidth();
-    const pageH = pdf.internal.pageSize.getHeight();
 
-    // Header
     pdf.setFillColor(15, 23, 42);
     pdf.rect(0, 0, pageW, 28, "F");
     pdf.setTextColor(255, 255, 255);
     pdf.setFontSize(16);
-    pdf.setFont("helvetica", "bold");
     pdf.text("ОПЕРАТИВНИЙ ЗВІТ", pageW / 2, 12, { align: "center" });
     pdf.setFontSize(10);
-    pdf.setFont("helvetica", "normal");
     pdf.text(`${title} | Сформовано: ${format(new Date(), "HH:mm dd.MM.yyyy")}`, pageW / 2, 20, { align: "center" });
     pdf.text(`Офіцер: ${user.email ?? "—"}`, pageW / 2, 26, { align: "center" });
 
