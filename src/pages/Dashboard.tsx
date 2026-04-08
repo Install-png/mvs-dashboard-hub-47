@@ -441,10 +441,17 @@ const Dashboard = () => {
                 <div className="space-y-1">
                   {incidents.slice(0, 6).map(inc => {
                     const sev = SEVERITY_CONFIG[inc.severity]; const sta = STATUS_CONFIG[inc.status];
+                    const isNew = newIncidentIds.has(inc.id);
+                    const isUpdated = updatedIncidentIds.has(inc.id);
                     return (
-                      <div key={inc.id} className="flex items-center justify-between py-2 px-2 rounded-md hover:bg-muted/50 transition-colors">
+                      <div key={inc.id} className={cn(
+                        "flex items-center justify-between py-2 px-2 rounded-md hover:bg-muted/50 transition-all",
+                        isNew && inc.severity === "Critical" && "animate-card-pulse-critical",
+                        isNew && inc.severity !== "Critical" && "animate-card-pulse-new",
+                        isUpdated && "animate-highlight-flash",
+                      )}>
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className={cn("h-2 w-2 rounded-full shrink-0", sev?.color?.replace("text-", "bg-") || "bg-muted-foreground")} />
+                          <span className={cn("h-2 w-2 rounded-full shrink-0", sev?.color?.replace("text-", "bg-") || "bg-muted-foreground", isNew && "animate-pulse")} />
                           <div className="min-w-0">
                             <p className="text-xs font-medium truncate">{inc.title}</p>
                             <p className="text-[10px] text-muted-foreground">{inc.regionName} • {INCIDENT_TYPE_LABELS[inc.type]}</p>
