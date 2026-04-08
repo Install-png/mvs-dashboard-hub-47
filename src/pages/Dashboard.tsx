@@ -272,24 +272,25 @@ const Dashboard = () => {
     if (!user) return;
     setGeneratingPdf(true);
     const pdf = new jsPDF("p", "mm", "a4");
+    setupCyrillicPdf(pdf);
     const pageW = pdf.internal.pageSize.getWidth();
     const now = new Date();
     const regionLabel = regionFilter === "all" ? "Вся Україна" : (REGION_NAME_MAP[regionFilter] || regionFilter);
 
     pdf.setFillColor(15, 23, 42); pdf.rect(0, 0, pageW, 28, "F");
-    pdf.setTextColor(255, 255, 255); pdf.setFontSize(14); pdf.setFont("helvetica", "bold");
+    pdf.setTextColor(255, 255, 255); pdf.setFontSize(14); pdf.setFont("Roboto", "normal");
     pdf.text("ОПЕРАТИВНИЙ ЗВІТ — СИТУАЦІЙНИЙ ЦЕНТР", pageW / 2, 11, { align: "center" });
-    pdf.setFontSize(9); pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(9);
     pdf.text(`${regionLabel} | ${format(now, "HH:mm dd.MM.yyyy")} | ${user.email ?? "—"}`, pageW / 2, 19, { align: "center" });
 
     let y = 34; pdf.setTextColor(0, 0, 0);
-    pdf.setFontSize(11); pdf.setFont("helvetica", "bold"); pdf.text("КРИТИЧНІ ІНДИКАТОРИ", 14, y); y += 5;
+    pdf.setFontSize(11); pdf.text("КРИТИЧНІ ІНДИКАТОРИ", 14, y); y += 5;
     autoTable(pdf, { startY: y, head: [["Показник", "Значення", "Показник", "Значення"]], body: [
       ["Активних інцидентів", String(kpis.active), "Персонал задіяно", String(kpis.totalPersonnel)],
       ["ДСНС подій", String(serviceStats.ses.total), "Поліція подій", String(serviceStats.police.total)],
       ["НГУ операцій", String(serviceStats.ngu.total), "Медицина подій", String(serviceStats.medical.total)],
       ["Врятовано сьогодні", String(kpis.rescued), "Показник вирішення", `${kpis.rate}%`],
-    ], theme: "grid", headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 8 }, bodyStyles: { fontSize: 8 }, columnStyles: { 0: { fontStyle: "bold", cellWidth: 45 }, 1: { cellWidth: 30 }, 2: { fontStyle: "bold", cellWidth: 45 }, 3: { cellWidth: 30 } } });
+    ], theme: "grid", styles: { font: "Roboto" }, headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 8 }, bodyStyles: { fontSize: 8 }, columnStyles: { 0: { fontStyle: "bold", cellWidth: 45 }, 1: { cellWidth: 30 }, 2: { fontStyle: "bold", cellWidth: 45 }, 3: { cellWidth: 30 } } });
     y = (pdf as any).lastAutoTable.finalY + 6;
 
     if (regionDeficits.length > 0) {
