@@ -23,12 +23,18 @@ interface IncidentStore {
   hoveredIncidentId: string | null;
   highlightedIncidentId: string | null;
 
+  // Real-time animation tracking
+  newIncidentIds: Set<string>;
+  updatedIncidentIds: Set<string>;
+
   // Actions — data
   setIncidents: (incidents: Incident[]) => void;
   addIncident: (incident: Incident) => void;
   updateIncidentInStore: (id: string, incident: Incident) => void;
   removeIncident: (id: string) => void;
   setLoading: (loading: boolean) => void;
+  clearNewFlag: (id: string) => void;
+  clearUpdatedFlag: (id: string) => void;
 
   // Actions — filters
   setFilterService: (f: FilterService) => void;
@@ -47,39 +53,62 @@ interface IncidentStore {
 }
 
 export const useIncidentStore = create<IncidentStore>((set, get) => ({
-  // Data
   incidents: [],
   loading: true,
 
-  // Filters
   filterService: "all",
   filterSeverity: "all",
   filterStatus: "all",
   dateFilter: undefined,
   searchQuery: "",
 
-  // Interactive
   selectedRegion: null,
   selectedIncident: null,
   hoveredIncidentId: null,
   highlightedIncidentId: null,
 
-  // Actions — data
+  newIncidentIds: new Set(),
+  updatedIncidentIds: new Set(),
+
   setIncidents: (incidents) => set({ incidents }),
-  addIncident: (incident) => set((s) => ({ incidents: [incident, ...s.incidents] })),
+  addIncident: (incident) =>
+    set((s) => {
+      const newIds = new Set(s.newIncidentIds);
+      newIds.add(incident.id);
+      // Auto-clear after 5s
+      setTimeout(() => get().clearNewFlag(incident.id), 5000);
+      return { incidents: [incident, ...s.incidents], newIncidentIds: newIds };
+    }),
   updateIncidentInStore: (id, incident) =>
-    set((s) => ({
-      incidents: s.incidents.map((i) => (i.id === id ? incident : i)),
-      selectedIncident: s.selectedIncident?.id === id ? incident : s.selectedIncident,
-    })),
+    set((s) => {
+      const updIds = new Set(s.updatedIncidentIds);
+      updIds.add(id);
+      setTimeout(() => get().clearUpdatedFlag(id), 4000);
+      return {
+        incidents: s.incidents.map((i) => (i.id === id ? incident : i)),
+        selectedIncident: s.selectedIncident?.id === id ? incident : s.selectedIncident,
+        updatedIncidentIds: updIds,
+      };
+    }),
   removeIncident: (id) =>
     set((s) => ({
       incidents: s.incidents.filter((i) => i.id !== id),
       selectedIncident: s.selectedIncident?.id === id ? null : s.selectedIncident,
     })),
   setLoading: (loading) => set({ loading }),
+  clearNewFlag: (id) =>
+    set((s) => {
+      const newIds = new Set(s.newIncidentIds);
+      newIds.delete(id);
+      return { newIncidentIds: newIds };
+    }),
+  clearUpdatedFlag: (id) =>
+    set((s) => {
+      const updIds = new Set(s.updatedIncidentIds);
+      updIds.delete(id);
+      return { updatedIncidentIds: updIds };
+    }),
 
-  // Actions — filters
   setFilterService: (filterService) => set({ filterService }),
   setFilterSeverity: (filterSeverity) => set({ filterSeverity }),
   setFilterStatus: (filterStatus) => set({ filterStatus }),
@@ -88,7 +117,6 @@ export const useIncidentStore = create<IncidentStore>((set, get) => ({
   resetFilters: () =>
     set({ filterService: "all", filterSeverity: "all", filterStatus: "all", dateFilter: undefined, searchQuery: "" }),
 
-  // Actions — interactive
   setSelectedRegion: (selectedRegion) => set({ selectedRegion }),
   setSelectedIncident: (selectedIncident) => set({ selectedIncident }),
   setHoveredIncidentId: (hoveredIncidentId) => set({ hoveredIncidentId }),

@@ -100,3 +100,33 @@
     font-family: 'Montserrat', sans-serif;
   }
 }
+
+/* Real-time animations */
+@keyframes card-pulse-new {
+  0% { box-shadow: 0 0 0 0 hsl(24 95% 53% / 0.5); }
+  50% { box-shadow: 0 0 16px 4px hsl(24 95% 53% / 0.3); }
+  100% { box-shadow: 0 0 0 0 hsl(24 95% 53% / 0); }
+}
+
+@keyframes card-pulse-critical {
+  0% { box-shadow: 0 0 0 0 hsl(0 84% 60% / 0.6); }
+  50% { box-shadow: 0 0 20px 6px hsl(0 84% 60% / 0.35); }
+  100% { box-shadow: 0 0 0 0 hsl(0 84% 60% / 0); }
+}
+
+@keyframes highlight-flash {
+  0%, 100% { background-color: transparent; }
+  25% { background-color: hsl(24 95% 53% / 0.15); }
+}
+
+.animate-card-pulse-new {
+  animation: card-pulse-new 1.5s ease-in-out 3;
+}
+
+.animate-card-pulse-critical {
+  animation: card-pulse-critical 1s ease-in-out infinite;
+}
+
+.animate-highlight-flash {
+  animation: highlight-flash 2s ease-in-out 2;
+}
