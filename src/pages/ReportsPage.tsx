@@ -111,7 +111,6 @@ const ReportsPage = () => {
     // Executive Summary
     pdf.setTextColor(0, 0, 0);
     pdf.setFontSize(12);
-    pdf.setFont("helvetica", "bold");
     let y = 36;
     pdf.text("I. ЗВЕДЕНА СТАТИСТИКА", 14, y); y += 4;
 
@@ -131,15 +130,14 @@ const ReportsPage = () => {
         ["Збитки (грн)", totalDamage.toLocaleString("uk-UA"), "Критичних", String(periodIncidents.filter(i => i.severity === "Critical").length)],
       ],
       theme: "grid",
+      styles: { font: "Roboto" },
       headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 8 },
       bodyStyles: { fontSize: 8 },
-      columnStyles: { 0: { fontStyle: "bold", cellWidth: 40 }, 1: { cellWidth: 30 }, 2: { fontStyle: "bold", cellWidth: 40 }, 3: { cellWidth: 30 } },
     });
 
     // Service stats
     y = (pdf as any).lastAutoTable.finalY + 8;
     pdf.setFontSize(12);
-    pdf.setFont("helvetica", "bold");
     pdf.text("II. СТАТИСТИКА СЛУЖБ", 14, y); y += 4;
 
     autoTable(pdf, {
@@ -151,6 +149,7 @@ const ReportsPage = () => {
         ["Нацгвардія", String(kpi.ng.events), `Персонал: ${kpi.ng.personnel}`, `Операцій: ${kpi.ng.operations}`],
       ],
       theme: "grid",
+      styles: { font: "Roboto" },
       headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 8 },
       bodyStyles: { fontSize: 8 },
     });
@@ -159,7 +158,6 @@ const ReportsPage = () => {
     if (periodIncidents.length > 0) {
       y = (pdf as any).lastAutoTable.finalY + 8;
       pdf.setFontSize(12);
-      pdf.setFont("helvetica", "bold");
       pdf.text("III. РЕЄСТР ІНЦИДЕНТІВ", 14, y); y += 4;
 
       const incRows = periodIncidents
@@ -178,9 +176,9 @@ const ReportsPage = () => {
         head: [["Час", "Локація", "Тип", "Назва", "Ос.скл.", "Р/П/З"]],
         body: incRows,
         theme: "striped",
+        styles: { font: "Roboto" },
         headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 7 },
         bodyStyles: { fontSize: 7 },
-        // jspdf-autotable handles page breaks automatically
       });
     }
 
