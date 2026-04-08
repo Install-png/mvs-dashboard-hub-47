@@ -4,9 +4,9 @@ import MobileNav from "./MobileNav";
 import { useEffect } from "react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import { CYRILLIC_FONT } from "@/lib/cyrillic-font";
 
 const DashboardLayout = () => {
-  // Ctrl+Shift+P — quick PDF export
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && e.key === "P") {
@@ -15,6 +15,9 @@ const DashboardLayout = () => {
         if (!el) return;
         html2canvas(el, { scale: 1.5 }).then((canvas) => {
           const pdf = new jsPDF("l", "mm", "a4");
+          pdf.addFileToVFS("Roboto-Regular.ttf", CYRILLIC_FONT);
+          pdf.addFont("Roboto-Regular.ttf", "Roboto", "normal");
+          pdf.setFont("Roboto");
           const imgData = canvas.toDataURL("image/png");
           const w = pdf.internal.pageSize.getWidth();
           const h = (canvas.height * w) / canvas.width;

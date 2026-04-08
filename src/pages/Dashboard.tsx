@@ -36,6 +36,13 @@ import {
 } from "recharts";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { CYRILLIC_FONT } from "@/lib/cyrillic-font";
+
+function setupCyrillicPdf(pdf: jsPDF) {
+  pdf.addFileToVFS("Roboto-Regular.ttf", CYRILLIC_FONT);
+  pdf.addFont("Roboto-Regular.ttf", "Roboto", "normal");
+  pdf.setFont("Roboto");
+}
 
 const CHART_COLORS = ["hsl(24,95%,53%)", "hsl(200,70%,50%)", "hsl(150,60%,45%)", "hsl(280,60%,55%)", "hsl(340,70%,55%)", "hsl(30,100%,75%)"];
 const MONTH_NAMES = ["Січ", "Лют", "Бер", "Кві", "Тра", "Чер", "Лип", "Сер", "Вер", "Жов", "Лис", "Гру"];
@@ -95,7 +102,7 @@ const Dashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { incidents, loading: incidentsLoading, setSelectedRegion } = useIncidentStore();
+  const { incidents, loading: incidentsLoading, setSelectedRegion, newIncidentIds, updatedIncidentIds } = useIncidentStore();
   useIncidents();
 
   const [regionFilter, setRegionFilter] = useState("all");
@@ -265,37 +272,38 @@ const Dashboard = () => {
     if (!user) return;
     setGeneratingPdf(true);
     const pdf = new jsPDF("p", "mm", "a4");
+    setupCyrillicPdf(pdf);
     const pageW = pdf.internal.pageSize.getWidth();
     const now = new Date();
     const regionLabel = regionFilter === "all" ? "Вся Україна" : (REGION_NAME_MAP[regionFilter] || regionFilter);
 
     pdf.setFillColor(15, 23, 42); pdf.rect(0, 0, pageW, 28, "F");
-    pdf.setTextColor(255, 255, 255); pdf.setFontSize(14); pdf.setFont("helvetica", "bold");
+    pdf.setTextColor(255, 255, 255); pdf.setFontSize(14); pdf.setFont("Roboto", "normal");
     pdf.text("ОПЕРАТИВНИЙ ЗВІТ — СИТУАЦІЙНИЙ ЦЕНТР", pageW / 2, 11, { align: "center" });
-    pdf.setFontSize(9); pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(9);
     pdf.text(`${regionLabel} | ${format(now, "HH:mm dd.MM.yyyy")} | ${user.email ?? "—"}`, pageW / 2, 19, { align: "center" });
 
     let y = 34; pdf.setTextColor(0, 0, 0);
-    pdf.setFontSize(11); pdf.setFont("helvetica", "bold"); pdf.text("КРИТИЧНІ ІНДИКАТОРИ", 14, y); y += 5;
+    pdf.setFontSize(11); pdf.text("КРИТИЧНІ ІНДИКАТОРИ", 14, y); y += 5;
     autoTable(pdf, { startY: y, head: [["Показник", "Значення", "Показник", "Значення"]], body: [
       ["Активних інцидентів", String(kpis.active), "Персонал задіяно", String(kpis.totalPersonnel)],
       ["ДСНС подій", String(serviceStats.ses.total), "Поліція подій", String(serviceStats.police.total)],
       ["НГУ операцій", String(serviceStats.ngu.total), "Медицина подій", String(serviceStats.medical.total)],
       ["Врятовано сьогодні", String(kpis.rescued), "Показник вирішення", `${kpis.rate}%`],
-    ], theme: "grid", headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 8 }, bodyStyles: { fontSize: 8 }, columnStyles: { 0: { fontStyle: "bold", cellWidth: 45 }, 1: { cellWidth: 30 }, 2: { fontStyle: "bold", cellWidth: 45 }, 3: { cellWidth: 30 } } });
+    ], theme: "grid", styles: { font: "Roboto" }, headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 8 }, bodyStyles: { fontSize: 8 }, columnStyles: { 0: { fontStyle: "bold", cellWidth: 45 }, 1: { cellWidth: 30 }, 2: { fontStyle: "bold", cellWidth: 45 }, 3: { cellWidth: 30 } } });
     y = (pdf as any).lastAutoTable.finalY + 6;
 
     if (regionDeficits.length > 0) {
-      pdf.setFontSize(11); pdf.setFont("helvetica", "bold"); pdf.text("РЕСУРСИ ПО РЕГІОНАМ", 14, y); y += 4;
-      autoTable(pdf, { startY: y, head: [["Регіон", "Активних", "Крит.", "Персонал", "Статус"]], body: regionDeficits.slice(0, 12).map(d => [d.regionName, String(d.activeCount), String(d.criticalCount), `${d.currentPersonnel}/${d.requiredPersonnel}`, d.surplus ? "Надлишок" : d.deficitPercent > 30 ? `Дефіцит ${d.deficitPercent}%` : "Норма"]), theme: "striped", headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 7 }, bodyStyles: { fontSize: 7 } });
+      pdf.setFontSize(11); pdf.text("РЕСУРСИ ПО РЕГІОНАМ", 14, y); y += 4;
+      autoTable(pdf, { startY: y, head: [["Регіон", "Активних", "Крит.", "Персонал", "Статус"]], body: regionDeficits.slice(0, 12).map(d => [d.regionName, String(d.activeCount), String(d.criticalCount), `${d.currentPersonnel}/${d.requiredPersonnel}`, d.surplus ? "Надлишок" : d.deficitPercent > 30 ? `Дефіцит ${d.deficitPercent}%` : "Норма"]), theme: "striped", styles: { font: "Roboto" }, headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 7 }, bodyStyles: { fontSize: 7 } });
       y = (pdf as any).lastAutoTable.finalY + 6;
     }
 
     const relevantIncs = regionFilter === "all" ? incidents : incidents.filter(i => i.region === regionFilter);
     if (relevantIncs.length > 0) {
       if (y > 230) { pdf.addPage(); y = 15; }
-      pdf.setFontSize(11); pdf.setFont("helvetica", "bold"); pdf.text("РЕЄСТР ІНЦИДЕНТІВ", 14, y); y += 4;
-      autoTable(pdf, { startY: y, head: [["Час", "Регіон", "Тип", "Назва", "Ос.скл.", "Р/П/З"]], body: relevantIncs.sort((a, b) => b.risk_level - a.risk_level).slice(0, 30).map(inc => [format(new Date(inc.timestamp), "HH:mm"), inc.regionName, INCIDENT_TYPE_LABELS[inc.type] || inc.type, inc.title.substring(0, 35), String(inc.resources.personnel_total), `${inc.impact.rescued}/${inc.impact.injured}/${inc.impact.fatalities}`]), theme: "striped", headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 7 }, bodyStyles: { fontSize: 7 } });
+      pdf.setFontSize(11); pdf.text("РЕЄСТР ІНЦИДЕНТІВ", 14, y); y += 4;
+      autoTable(pdf, { startY: y, head: [["Час", "Регіон", "Тип", "Назва", "Ос.скл.", "Р/П/З"]], body: relevantIncs.sort((a, b) => b.risk_level - a.risk_level).slice(0, 30).map(inc => [format(new Date(inc.timestamp), "HH:mm"), inc.regionName, INCIDENT_TYPE_LABELS[inc.type] || inc.type, inc.title.substring(0, 35), String(inc.resources.personnel_total), `${inc.impact.rescued}/${inc.impact.injured}/${inc.impact.fatalities}`]), theme: "striped", styles: { font: "Roboto" }, headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 7 }, bodyStyles: { fontSize: 7 } });
     }
 
     const totalPages = pdf.getNumberOfPages();
@@ -341,13 +349,13 @@ const Dashboard = () => {
       {/* ═══ KPI ROW ═══ */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
-          { label: "Активні", value: kpis.active, icon: AlertTriangle, accent: "text-destructive", bg: "bg-destructive/10" },
-          { label: "За добу", value: kpis.todayCount, icon: Clock, accent: "text-orange-500", bg: "bg-orange-500/10" },
-          { label: "Персонал", value: kpis.totalPersonnel, icon: Users, accent: "text-primary", bg: "bg-primary/10" },
-          { label: "Врятовано", value: kpis.rescued, icon: Heart, accent: "text-emerald-600", bg: "bg-emerald-500/10" },
-          { label: "Вирішення", value: `${kpis.rate}%`, icon: TrendingUp, accent: "text-primary", bg: "bg-primary/10" },
+          { label: "Активні", value: kpis.active, icon: AlertTriangle, accent: "text-destructive", bg: "bg-destructive/10", pulse: newIncidentIds.size > 0 },
+          { label: "За добу", value: kpis.todayCount, icon: Clock, accent: "text-orange-500", bg: "bg-orange-500/10", pulse: false },
+          { label: "Персонал", value: kpis.totalPersonnel, icon: Users, accent: "text-primary", bg: "bg-primary/10", pulse: false },
+          { label: "Врятовано", value: kpis.rescued, icon: Heart, accent: "text-emerald-600", bg: "bg-emerald-500/10", pulse: false },
+          { label: "Вирішення", value: `${kpis.rate}%`, icon: TrendingUp, accent: "text-primary", bg: "bg-primary/10", pulse: false },
         ].map(k => (
-          <Card key={k.label}>
+          <Card key={k.label} className={cn(k.pulse && "animate-card-pulse-new")}>
             <CardContent className="p-3 flex items-center gap-3">
               <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center shrink-0", k.bg)}>
                 <k.icon className={cn("h-4 w-4", k.accent)} />
@@ -441,10 +449,17 @@ const Dashboard = () => {
                 <div className="space-y-1">
                   {incidents.slice(0, 6).map(inc => {
                     const sev = SEVERITY_CONFIG[inc.severity]; const sta = STATUS_CONFIG[inc.status];
+                    const isNew = newIncidentIds.has(inc.id);
+                    const isUpdated = updatedIncidentIds.has(inc.id);
                     return (
-                      <div key={inc.id} className="flex items-center justify-between py-2 px-2 rounded-md hover:bg-muted/50 transition-colors">
+                      <div key={inc.id} className={cn(
+                        "flex items-center justify-between py-2 px-2 rounded-md hover:bg-muted/50 transition-all",
+                        isNew && inc.severity === "Critical" && "animate-card-pulse-critical",
+                        isNew && inc.severity !== "Critical" && "animate-card-pulse-new",
+                        isUpdated && "animate-highlight-flash",
+                      )}>
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className={cn("h-2 w-2 rounded-full shrink-0", sev?.color?.replace("text-", "bg-") || "bg-muted-foreground")} />
+                          <span className={cn("h-2 w-2 rounded-full shrink-0", sev?.color?.replace("text-", "bg-") || "bg-muted-foreground", isNew && "animate-pulse")} />
                           <div className="min-w-0">
                             <p className="text-xs font-medium truncate">{inc.title}</p>
                             <p className="text-[10px] text-muted-foreground">{inc.regionName} • {INCIDENT_TYPE_LABELS[inc.type]}</p>

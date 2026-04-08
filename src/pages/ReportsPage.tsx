@@ -14,7 +14,14 @@ import { REGION_NAME_MAP } from "@/components/UkraineMap";
 import { FileBarChart, Download, Loader2, Trash2 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { CYRILLIC_FONT } from "@/lib/cyrillic-font";
 import { useEffect } from "react";
+
+function setupCyrillicPdf(pdf: jsPDF) {
+  pdf.addFileToVFS("Roboto-Regular.ttf", CYRILLIC_FONT);
+  pdf.addFont("Roboto-Regular.ttf", "Roboto", "normal");
+  pdf.setFont("Roboto");
+}
 
 function safeDate(v: any): Date {
   if (!v) return new Date();
@@ -89,25 +96,21 @@ const ReportsPage = () => {
 
     // Generate PDF with incident data + calendar data
     const pdf = new jsPDF("p", "mm", "a4");
+    setupCyrillicPdf(pdf);
     const pageW = pdf.internal.pageSize.getWidth();
-    const pageH = pdf.internal.pageSize.getHeight();
 
-    // Header
     pdf.setFillColor(15, 23, 42);
     pdf.rect(0, 0, pageW, 28, "F");
     pdf.setTextColor(255, 255, 255);
     pdf.setFontSize(16);
-    pdf.setFont("helvetica", "bold");
     pdf.text("ОПЕРАТИВНИЙ ЗВІТ", pageW / 2, 12, { align: "center" });
     pdf.setFontSize(10);
-    pdf.setFont("helvetica", "normal");
     pdf.text(`${title} | Сформовано: ${format(new Date(), "HH:mm dd.MM.yyyy")}`, pageW / 2, 20, { align: "center" });
     pdf.text(`Офіцер: ${user.email ?? "—"}`, pageW / 2, 26, { align: "center" });
 
     // Executive Summary
     pdf.setTextColor(0, 0, 0);
     pdf.setFontSize(12);
-    pdf.setFont("helvetica", "bold");
     let y = 36;
     pdf.text("I. ЗВЕДЕНА СТАТИСТИКА", 14, y); y += 4;
 
@@ -127,15 +130,14 @@ const ReportsPage = () => {
         ["Збитки (грн)", totalDamage.toLocaleString("uk-UA"), "Критичних", String(periodIncidents.filter(i => i.severity === "Critical").length)],
       ],
       theme: "grid",
+      styles: { font: "Roboto" },
       headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 8 },
       bodyStyles: { fontSize: 8 },
-      columnStyles: { 0: { fontStyle: "bold", cellWidth: 40 }, 1: { cellWidth: 30 }, 2: { fontStyle: "bold", cellWidth: 40 }, 3: { cellWidth: 30 } },
     });
 
     // Service stats
     y = (pdf as any).lastAutoTable.finalY + 8;
     pdf.setFontSize(12);
-    pdf.setFont("helvetica", "bold");
     pdf.text("II. СТАТИСТИКА СЛУЖБ", 14, y); y += 4;
 
     autoTable(pdf, {
@@ -147,6 +149,7 @@ const ReportsPage = () => {
         ["Нацгвардія", String(kpi.ng.events), `Персонал: ${kpi.ng.personnel}`, `Операцій: ${kpi.ng.operations}`],
       ],
       theme: "grid",
+      styles: { font: "Roboto" },
       headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 8 },
       bodyStyles: { fontSize: 8 },
     });
@@ -155,7 +158,6 @@ const ReportsPage = () => {
     if (periodIncidents.length > 0) {
       y = (pdf as any).lastAutoTable.finalY + 8;
       pdf.setFontSize(12);
-      pdf.setFont("helvetica", "bold");
       pdf.text("III. РЕЄСТР ІНЦИДЕНТІВ", 14, y); y += 4;
 
       const incRows = periodIncidents
@@ -174,9 +176,9 @@ const ReportsPage = () => {
         head: [["Час", "Локація", "Тип", "Назва", "Ос.скл.", "Р/П/З"]],
         body: incRows,
         theme: "striped",
+        styles: { font: "Roboto" },
         headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontSize: 7 },
         bodyStyles: { fontSize: 7 },
-        // jspdf-autotable handles page breaks automatically
       });
     }
 
