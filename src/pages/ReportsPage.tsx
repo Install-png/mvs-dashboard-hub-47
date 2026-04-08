@@ -22,7 +22,6 @@ function setupCyrillicPdf(pdf: jsPDF) {
   pdf.addFont("Roboto-Regular.ttf", "Roboto", "normal");
   pdf.setFont("Roboto");
 }
-import { useEffect } from "react";
 
 function safeDate(v: any): Date {
   if (!v) return new Date();
