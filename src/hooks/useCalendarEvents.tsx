@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 
+export type CalendarEventStatus = "planned" | "completed" | "cancelled";
+
 export interface CalendarEvent {
   id: string;
   user_id: string;
@@ -26,6 +28,9 @@ export interface CalendarEvent {
   ng_personnel_deployed: number;
   ng_equipment_units: number;
   ng_operations_conducted: number;
+  is_archived: boolean;
+  status: CalendarEventStatus;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -51,6 +56,9 @@ export const emptyEvent = (): Partial<CalendarEvent> => ({
   ng_personnel_deployed: 0,
   ng_equipment_units: 0,
   ng_operations_conducted: 0,
+  is_archived: false,
+  status: "planned",
+  archived_at: null,
 });
 
 export function useCalendarEvents() {
@@ -60,6 +68,9 @@ export function useCalendarEvents() {
   const { toast } = useToast();
 
   const fetchEvents = useCallback(async () => {
+    // Auto-archive past events on every fetch (server-side function)
+    await supabase.rpc("auto_archive_calendar_events" as any).then(() => {}, () => {});
+
     const { data, error } = await supabase
       .from("calendar_events" as any)
       .select("*")
@@ -82,6 +93,7 @@ export function useCalendarEvents() {
     delete payload.id;
     delete payload.created_at;
     delete payload.updated_at;
+    delete payload.archived_at; // managed by trigger
 
     if (ev.id) {
       const { error } = await supabase
@@ -89,11 +101,13 @@ export function useCalendarEvents() {
         .update(payload)
         .eq("id", ev.id);
       if (error) toast({ title: "Помилка", description: error.message, variant: "destructive" });
+      else toast({ title: "Збережено", description: "Подію оновлено" });
     } else {
       const { error } = await supabase
         .from("calendar_events" as any)
         .insert(payload);
       if (error) toast({ title: "Помилка", description: error.message, variant: "destructive" });
+      else toast({ title: "Створено", description: "Нову подію додано" });
     }
     await fetchEvents();
   };
@@ -101,8 +115,32 @@ export function useCalendarEvents() {
   const deleteEvent = async (id: string) => {
     const { error } = await supabase.from("calendar_events" as any).delete().eq("id", id);
     if (error) toast({ title: "Помилка", description: error.message, variant: "destructive" });
+    else toast({ title: "Видалено", description: "Подію видалено" });
     await fetchEvents();
   };
 
-  return { events, loading, fetchEvents, saveEvent, deleteEvent };
+  const archiveEvent = async (id: string, archived = true) => {
+    const { error } = await supabase
+      .from("calendar_events" as any)
+      .update({
+        is_archived: archived,
+        archived_at: archived ? new Date().toISOString() : null,
+        status: archived ? "completed" : "planned",
+      } as any)
+      .eq("id", id);
+    if (error) toast({ title: "Помилка", description: error.message, variant: "destructive" });
+    else toast({ title: archived ? "В архіві" : "Відновлено", description: archived ? "Подію переміщено в архів" : "Подію повернуто в активні" });
+    await fetchEvents();
+  };
+
+  const setEventStatus = async (id: string, status: CalendarEventStatus) => {
+    const { error } = await supabase
+      .from("calendar_events" as any)
+      .update({ status } as any)
+      .eq("id", id);
+    if (error) toast({ title: "Помилка", description: error.message, variant: "destructive" });
+    await fetchEvents();
+  };
+
+  return { events, loading, fetchEvents, saveEvent, deleteEvent, archiveEvent, setEventStatus };
 }

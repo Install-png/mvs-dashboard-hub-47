@@ -16,11 +16,13 @@ export type Database = {
     Tables: {
       calendar_events: {
         Row: {
+          archived_at: string | null
           created_at: string
           description: string | null
           event_date: string
           event_time: string | null
           id: string
+          is_archived: boolean
           location: string | null
           ng_equipment_units: number | null
           ng_operations_conducted: number | null
@@ -37,16 +39,19 @@ export type Database = {
           ses_fires_extinguished: number | null
           ses_people_rescued: number | null
           ses_personnel_involved: number | null
+          status: string
           title: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          archived_at?: string | null
           created_at?: string
           description?: string | null
           event_date?: string
           event_time?: string | null
           id?: string
+          is_archived?: boolean
           location?: string | null
           ng_equipment_units?: number | null
           ng_operations_conducted?: number | null
@@ -63,16 +68,19 @@ export type Database = {
           ses_fires_extinguished?: number | null
           ses_people_rescued?: number | null
           ses_personnel_involved?: number | null
+          status?: string
           title?: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          archived_at?: string | null
           created_at?: string
           description?: string | null
           event_date?: string
           event_time?: string | null
           id?: string
+          is_archived?: boolean
           location?: string | null
           ng_equipment_units?: number | null
           ng_operations_conducted?: number | null
@@ -89,6 +97,7 @@ export type Database = {
           ses_fires_extinguished?: number | null
           ses_people_rescued?: number | null
           ses_personnel_involved?: number | null
+          status?: string
           title?: string
           updated_at?: string
           user_id?: string
@@ -328,7 +337,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      auto_archive_calendar_events: { Args: never; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
