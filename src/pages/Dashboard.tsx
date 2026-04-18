@@ -323,16 +323,47 @@ const Dashboard = () => {
     { key: "medical", label: "Медична служба", icon: Stethoscope, borderColor: "border-l-emerald-500", stats: [{ label: "Подій", value: serviceStats.medical.total }, { label: "Бригад", value: serviceStats.medical.brigades }, { label: "Постраждалих", value: serviceStats.medical.injured }, { label: "Врятовано", value: serviceStats.medical.rescued }] },
   ];
 
+  // Trend computation: today vs yesterday
+  const trends = useMemo(() => {
+    const now = new Date();
+    const yest = subDays(startOfDay(now), 1);
+    const yestEnd = startOfDay(now);
+    const yIncs = incidents.filter(i => {
+      const d = new Date(i.timestamp);
+      return d >= yest && d < yestEnd;
+    });
+    const tIncs = incidents.filter(i => isToday(new Date(i.timestamp)));
+    const yPers = yIncs.reduce((s, i) => s + i.resources.personnel_total, 0);
+    const tPers = tIncs.reduce((s, i) => s + i.resources.personnel_total, 0);
+    return {
+      incidents: tIncs.length - yIncs.length,
+      personnel: tPers - yPers,
+    };
+  }, [incidents]);
+
+  const criticalIncidents = useMemo(() => allActive.filter(i => i.severity === "Critical"), [allActive]);
+
   return (
-    <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-5">
-      {/* ═══ HEADER ═══ */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-lg md:text-xl font-bold tracking-tight" style={{ fontFamily: "Montserrat, sans-serif" }}>
-          Оперативна панель
-        </h1>
+    <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-4">
+      {/* ═══ HEADER (sticky on scroll) ═══ */}
+      <div className="sticky top-0 z-20 -mx-4 md:-mx-6 px-4 md:px-6 py-3 bg-background/85 backdrop-blur-md border-b flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <h1 className="text-lg md:text-xl font-bold tracking-tight" style={{ fontFamily: "Montserrat, sans-serif" }}>
+            Оперативна панель
+          </h1>
+          {criticalIncidents.length > 0 && (
+            <Badge variant="destructive" className="gap-1 animate-pulse text-[10px]">
+              <AlertTriangle className="h-3 w-3" /> {criticalIncidents.length} критичних
+            </Badge>
+          )}
+          <span className="text-[10px] text-muted-foreground hidden md:flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Live • {format(new Date(), "HH:mm")}
+          </span>
+        </div>
         <div className="flex items-center gap-2">
           <Select value={regionFilter} onValueChange={setRegionFilter}>
-            <SelectTrigger className="w-[200px] h-8 text-xs"><SelectValue placeholder="Вся країна" /></SelectTrigger>
+            <SelectTrigger className="w-[180px] h-8 text-xs"><SelectValue placeholder="Вся країна" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">🇺🇦 Вся країна</SelectItem>
               {REGION_OPTIONS.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
@@ -341,29 +372,34 @@ const Dashboard = () => {
           {regionFilter !== "all" && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setRegionFilter("all")}><X className="h-3.5 w-3.5" /></Button>}
           <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={generatePdf} disabled={generatingPdf}>
             {generatingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-            Звіт
+            Звіт PDF
           </Button>
         </div>
       </div>
 
-      {/* ═══ KPI ROW ═══ */}
+      {/* ═══ KPI ROW with trend ═══ */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
-          { label: "Активні", value: kpis.active, icon: AlertTriangle, accent: "text-destructive", bg: "bg-destructive/10", pulse: newIncidentIds.size > 0 },
-          { label: "За добу", value: kpis.todayCount, icon: Clock, accent: "text-orange-500", bg: "bg-orange-500/10", pulse: false },
-          { label: "Персонал", value: kpis.totalPersonnel, icon: Users, accent: "text-primary", bg: "bg-primary/10", pulse: false },
-          { label: "Врятовано", value: kpis.rescued, icon: Heart, accent: "text-emerald-600", bg: "bg-emerald-500/10", pulse: false },
-          { label: "Вирішення", value: `${kpis.rate}%`, icon: TrendingUp, accent: "text-primary", bg: "bg-primary/10", pulse: false },
+          { label: "Активні інциденти", value: kpis.active, icon: AlertTriangle, accent: "text-destructive", bg: "bg-destructive/10", pulse: newIncidentIds.size > 0, trend: null },
+          { label: "За добу", value: kpis.todayCount, icon: Clock, accent: "text-orange-500", bg: "bg-orange-500/10", pulse: false, trend: trends.incidents },
+          { label: "Залучено осіб", value: kpis.totalPersonnel, icon: Users, accent: "text-primary", bg: "bg-primary/10", pulse: false, trend: trends.personnel },
+          { label: "Врятовано сьогодні", value: kpis.rescued, icon: Heart, accent: "text-emerald-600", bg: "bg-emerald-500/10", pulse: false, trend: null },
+          { label: "Вирішення", value: `${kpis.rate}%`, icon: TrendingUp, accent: "text-primary", bg: "bg-primary/10", pulse: false, trend: null },
         ].map(k => (
-          <Card key={k.label} className={cn(k.pulse && "animate-card-pulse-new")}>
-            <CardContent className="p-3 flex items-center gap-3">
-              <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center shrink-0", k.bg)}>
-                <k.icon className={cn("h-4 w-4", k.accent)} />
+          <Card key={k.label} className={cn("transition-all hover:shadow-md", k.pulse && "animate-card-pulse-new")}>
+            <CardContent className="p-3">
+              <div className="flex items-start justify-between mb-1.5">
+                <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center", k.bg)}>
+                  <k.icon className={cn("h-4 w-4", k.accent)} />
+                </div>
+                {k.trend !== null && k.trend !== 0 && (
+                  <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded", k.trend > 0 ? "text-destructive bg-destructive/10" : "text-emerald-600 bg-emerald-500/10")}>
+                    {k.trend > 0 ? "↑" : "↓"} {Math.abs(k.trend)}
+                  </span>
+                )}
               </div>
-              <div>
-                <p className="text-xl font-bold leading-none">{k.value}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">{k.label}</p>
-              </div>
+              <p className="text-2xl font-bold leading-none">{k.value}</p>
+              <p className="text-[10px] text-muted-foreground mt-1">{k.label}</p>
             </CardContent>
           </Card>
         ))}
