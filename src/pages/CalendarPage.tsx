@@ -14,8 +14,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCalendarEvents, CalendarEvent, CalendarEventStatus, emptyEvent } from "@/hooks/useCalendarEvents";
 import { useIncidentStore } from "@/stores/useIncidentStore";
 import { useIncidents } from "@/hooks/useIncidents";
+import { useUnifiedStats } from "@/hooks/useUnifiedStats";
 import { SEVERITY_CONFIG, STATUS_CONFIG, INCIDENT_TYPE_LABELS } from "@/data/mockIncidents";
-import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Loader2, AlertTriangle, Flame, Shield, Phone, MapPin, Clock, FileText, Calendar as CalendarIcon, Archive, ArchiveRestore, CheckCircle2, XCircle, History } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Loader2, AlertTriangle, Flame, Shield, Phone, MapPin, Clock, FileText, Calendar as CalendarIcon, Archive, ArchiveRestore, CheckCircle2, XCircle, History, Link2, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ArchiveFilter = "active" | "archived" | "all";
@@ -30,6 +31,7 @@ const CalendarPage = () => {
   const { events, loading, saveEvent, deleteEvent, archiveEvent, setEventStatus } = useCalendarEvents();
   const { incidents } = useIncidentStore();
   useIncidents();
+  const unified = useUnifiedStats();
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
