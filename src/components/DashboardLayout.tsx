@@ -5,8 +5,16 @@ import { useEffect } from "react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import { CYRILLIC_FONT } from "@/lib/cyrillic-font";
+import { useIncidents } from "@/hooks/useIncidents";
+import { useIncidentToCalendarSync } from "@/hooks/useIncidentToCalendarSync";
 
 const DashboardLayout = () => {
+  // ═══ Глобальна підписка на інциденти + auto-sync у календар ═══
+  // Завдяки цьому Дашборд / Сит. центр / Календар бачать однакові цифри,
+  // а вирішені інциденти автоматично з'являються архівними записами в календарі.
+  useIncidents();
+  useIncidentToCalendarSync();
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && e.key === "P") {

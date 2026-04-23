@@ -489,6 +489,11 @@ const CalendarPage = () => {
                                         <Archive className="h-2.5 w-2.5" />Архів
                                       </Badge>
                                     )}
+                                    {ev.description?.includes("[auto:") && (
+                                      <Badge variant="outline" className="text-[8px] gap-0.5 h-4 border-primary/40 text-primary bg-primary/10">
+                                        <Link2 className="h-2.5 w-2.5" />Авто з Сит. центру
+                                      </Badge>
+                                    )}
                                   </div>
                                   {ev.event_time && <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5"><Clock className="h-2.5 w-2.5" />{ev.event_time}</p>}
                                   {ev.location && <p className="text-[10px] text-muted-foreground flex items-center gap-1"><MapPin className="h-2.5 w-2.5" />{ev.location}</p>}
