@@ -14,8 +14,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCalendarEvents, CalendarEvent, CalendarEventStatus, emptyEvent } from "@/hooks/useCalendarEvents";
 import { useIncidentStore } from "@/stores/useIncidentStore";
 import { useIncidents } from "@/hooks/useIncidents";
+import { useUnifiedStats } from "@/hooks/useUnifiedStats";
 import { SEVERITY_CONFIG, STATUS_CONFIG, INCIDENT_TYPE_LABELS } from "@/data/mockIncidents";
-import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Loader2, AlertTriangle, Flame, Shield, Phone, MapPin, Clock, FileText, Calendar as CalendarIcon, Archive, ArchiveRestore, CheckCircle2, XCircle, History } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Loader2, AlertTriangle, Flame, Shield, ShieldCheck, Phone, MapPin, Clock, FileText, Calendar as CalendarIcon, Archive, ArchiveRestore, CheckCircle2, XCircle, History, Link2, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ArchiveFilter = "active" | "archived" | "all";
@@ -30,6 +31,7 @@ const CalendarPage = () => {
   const { events, loading, saveEvent, deleteEvent, archiveEvent, setEventStatus } = useCalendarEvents();
   const { incidents } = useIncidentStore();
   useIncidents();
+  const unified = useUnifiedStats();
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
@@ -85,16 +87,16 @@ const CalendarPage = () => {
   const isPastDate = selectedDate ? isBefore(selectedDate, today) : false;
   const isFutureDate = selectedDate ? isBefore(today, selectedDate) : false;
 
-  const dayStats = useMemo(() => {
-    const incs = selectedIncidents;
-    return {
-      total: incs.length,
-      critical: incs.filter(i => i.severity === "Critical" || i.severity === "High").length,
-      personnel: incs.reduce((s, i) => s + i.resources.personnel_total, 0),
-      rescued: incs.reduce((s, i) => s + i.impact.rescued, 0),
-      injured: incs.reduce((s, i) => s + i.impact.injured, 0),
-    };
-  }, [selectedIncidents]);
+  // ═══ ЄДИНЕ ДЖЕРЕЛО ЦИФР — useUnifiedStats ═══
+  // Цифри тут гарантовано співпадають із Дашбордом та Ситуаційним центром
+  const dayUnified = useMemo(() => selectedDate ? unified.statsForDate(selectedDate) : null, [selectedDate, unified]);
+  const dayStats = useMemo(() => ({
+    total: dayUnified?.total ?? 0,
+    critical: dayUnified?.critical ?? 0,
+    personnel: dayUnified?.personnel ?? 0,
+    rescued: dayUnified?.rescued ?? 0,
+    injured: dayUnified?.injured ?? 0,
+  }), [dayUnified]);
 
   // Monthly summary (count from full events list to be accurate)
   const monthSummary = useMemo(() => {
@@ -311,6 +313,91 @@ const CalendarPage = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* ═══ АВТО-ЗВЕДЕННЯ З СИТ. ЦЕНТРУ — синхронізовано з дашбордом ═══ */}
+          {selectedDate && dayUnified && dayUnified.total > 0 && (
+            <Card className="border-l-4 border-l-primary bg-gradient-to-br from-primary/5 to-transparent">
+              <CardContent className="p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <div className="h-6 w-6 rounded-md bg-primary/15 flex items-center justify-center shrink-0">
+                      <Link2 className="h-3 w-3 text-primary" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold leading-tight">Авто-зведення</p>
+                      <p className="text-[9px] text-muted-foreground leading-tight">З ситуаційного центру</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="text-[8px] gap-0.5 h-4 border-emerald-300 text-emerald-700 bg-emerald-500/10">
+                    <Activity className="h-2.5 w-2.5" /> live
+                  </Badge>
+                </div>
+
+                {/* Розподіл по службах */}
+                <div className="grid grid-cols-2 gap-1.5 pt-1">
+                  <div className="flex items-center justify-between text-[10px] px-2 py-1 rounded bg-red-500/10 border border-red-500/20">
+                    <span className="flex items-center gap-1 text-red-700"><Flame className="h-2.5 w-2.5" />ДСНС</span>
+                    <span className="font-bold text-red-700">{dayUnified.byService.ses}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] px-2 py-1 rounded bg-blue-500/10 border border-blue-500/20">
+                    <span className="flex items-center gap-1 text-blue-700"><Phone className="h-2.5 w-2.5" />Поліція</span>
+                    <span className="font-bold text-blue-700">{dayUnified.byService.police}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/20">
+                    <span className="flex items-center gap-1 text-emerald-700"><Shield className="h-2.5 w-2.5" />Медицина</span>
+                    <span className="font-bold text-emerald-700">{dayUnified.byService.medical}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] px-2 py-1 rounded bg-purple-500/10 border border-purple-500/20">
+                    <span className="flex items-center gap-1 text-purple-700"><ShieldCheck className="h-2.5 w-2.5" />Комбін.</span>
+                    <span className="font-bold text-purple-700">{dayUnified.byService.combined}</span>
+                  </div>
+                </div>
+
+                {/* Підсумкові ресурси */}
+                <div className="grid grid-cols-3 gap-1 text-center pt-1 border-t">
+                  <div>
+                    <p className="text-xs font-bold text-primary leading-none">{dayUnified.ses_units + dayUnified.police_units + dayUnified.medical_units}</p>
+                    <p className="text-[8px] text-muted-foreground mt-0.5">Підрозділів</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-orange-600 leading-none">{dayUnified.personnel}</p>
+                    <p className="text-[8px] text-muted-foreground mt-0.5">Особовий склад</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-destructive leading-none">{dayUnified.fatalities}</p>
+                    <p className="text-[8px] text-muted-foreground mt-0.5">Загиблих</p>
+                  </div>
+                </div>
+
+                {/* Створити звіт у календарі на основі цих даних */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full h-7 text-[10px] gap-1 mt-1"
+                  onClick={() => {
+                    const ses = dayUnified.byService.ses > 0;
+                    const pol = dayUnified.byService.police > 0;
+                    setEditing({
+                      ...emptyEvent(),
+                      event_date: format(selectedDate, "yyyy-MM-dd"),
+                      title: `Зведення за ${format(selectedDate, "d MMMM yyyy", { locale: uk })}`,
+                      description: `Авто-сформовано з даних Сит. центру.\nІнцидентів: ${dayUnified.total}, критичних: ${dayUnified.critical}.\nВрятовано: ${dayUnified.rescued}, поранено: ${dayUnified.injured}, загинуло: ${dayUnified.fatalities}.`,
+                      service_ses: ses,
+                      service_police: pol,
+                      ses_people_rescued: dayUnified.rescued,
+                      ses_personnel_involved: dayUnified.personnel,
+                      ses_fires_extinguished: dayUnified.byType["Fire"] || 0,
+                      police_calls: dayUnified.byService.police,
+                      status: "completed",
+                    });
+                    setDialogOpen(true);
+                  }}
+                >
+                  <FileText className="h-3 w-3" /> Створити звіт зі зведення
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Tabs */}
           {selectedDate && (

@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useIncidents } from "@/hooks/useIncidents";
 import { useIncidentStore } from "@/stores/useIncidentStore";
+import { useUnifiedStats } from "@/hooks/useUnifiedStats";
 import { REGION_NAME_MAP } from "@/components/UkraineMap";
 import {
   SEVERITY_CONFIG, STATUS_CONFIG, INCIDENT_TYPE_LABELS,
@@ -104,6 +105,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { incidents, loading: incidentsLoading, setSelectedRegion, newIncidentIds, updatedIncidentIds } = useIncidentStore();
   useIncidents();
+  const unified = useUnifiedStats();
 
   const [regionFilter, setRegionFilter] = useState("all");
   const [serviceDialog, setServiceDialog] = useState<ServiceKey | null>(null);
@@ -132,16 +134,18 @@ const Dashboard = () => {
 
   const allActive = useMemo(() => incidents.filter(i => i.status !== "Resolved"), [incidents]);
 
-  // ═══ KPI ═══
+  // ═══ KPI — використовуємо УНІФІКОВАНУ статистику (синхронно з Календарем та Сит. центром) ═══
   const kpis = useMemo(() => {
-    const active = allActive.length;
-    const todayIncs = incidents.filter(i => isToday(new Date(i.timestamp)));
-    const resolved = incidents.filter(i => i.status === "Resolved").length;
-    const rate = incidents.length > 0 ? Math.round((resolved / incidents.length) * 100) : 0;
-    const totalPersonnel = allActive.reduce((s, i) => s + i.resources.personnel_total, 0);
-    const rescued = todayIncs.reduce((s, i) => s + i.impact.rescued, 0);
-    return { active, todayCount: todayIncs.length, resolved, rate, totalPersonnel, rescued };
-  }, [incidents, allActive]);
+    const rate = unified.all.total > 0 ? Math.round((unified.all.resolved / unified.all.total) * 100) : 0;
+    return {
+      active: unified.all.active,
+      todayCount: unified.today.total,
+      resolved: unified.all.resolved,
+      rate,
+      totalPersonnel: unified.all.personnel,
+      rescued: unified.today.rescued,
+    };
+  }, [unified]);
 
   // ═══ SERVICE DATA ═══
   const serviceStats = useMemo(() => {
