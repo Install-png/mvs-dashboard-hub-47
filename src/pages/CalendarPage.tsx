@@ -87,16 +87,16 @@ const CalendarPage = () => {
   const isPastDate = selectedDate ? isBefore(selectedDate, today) : false;
   const isFutureDate = selectedDate ? isBefore(today, selectedDate) : false;
 
-  const dayStats = useMemo(() => {
-    const incs = selectedIncidents;
-    return {
-      total: incs.length,
-      critical: incs.filter(i => i.severity === "Critical" || i.severity === "High").length,
-      personnel: incs.reduce((s, i) => s + i.resources.personnel_total, 0),
-      rescued: incs.reduce((s, i) => s + i.impact.rescued, 0),
-      injured: incs.reduce((s, i) => s + i.impact.injured, 0),
-    };
-  }, [selectedIncidents]);
+  // ═══ ЄДИНЕ ДЖЕРЕЛО ЦИФР — useUnifiedStats ═══
+  // Цифри тут гарантовано співпадають із Дашбордом та Ситуаційним центром
+  const dayUnified = useMemo(() => selectedDate ? unified.statsForDate(selectedDate) : null, [selectedDate, unified]);
+  const dayStats = useMemo(() => ({
+    total: dayUnified?.total ?? 0,
+    critical: dayUnified?.critical ?? 0,
+    personnel: dayUnified?.personnel ?? 0,
+    rescued: dayUnified?.rescued ?? 0,
+    injured: dayUnified?.injured ?? 0,
+  }), [dayUnified]);
 
   // Monthly summary (count from full events list to be accurate)
   const monthSummary = useMemo(() => {
