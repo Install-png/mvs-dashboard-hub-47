@@ -16,7 +16,7 @@ import { useIncidentStore } from "@/stores/useIncidentStore";
 import { useIncidents } from "@/hooks/useIncidents";
 import { useUnifiedStats } from "@/hooks/useUnifiedStats";
 import { SEVERITY_CONFIG, STATUS_CONFIG, INCIDENT_TYPE_LABELS } from "@/data/mockIncidents";
-import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Loader2, AlertTriangle, Flame, Shield, Phone, MapPin, Clock, FileText, Calendar as CalendarIcon, Archive, ArchiveRestore, CheckCircle2, XCircle, History, Link2, Activity } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Loader2, AlertTriangle, Flame, Shield, ShieldCheck, Phone, MapPin, Clock, FileText, Calendar as CalendarIcon, Archive, ArchiveRestore, CheckCircle2, XCircle, History, Link2, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ArchiveFilter = "active" | "archived" | "all";
