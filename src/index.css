@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Open+Sans:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Open+Sans:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -129,4 +129,58 @@
 
 .animate-highlight-flash {
   animation: highlight-flash 2s ease-in-out 2;
+}
+
+/* User UI preferences */
+:root[data-density="compact"] { --space-y: 0.5rem; }
+:root[data-density="comfortable"] { --space-y: 1rem; }
+:root[data-density="spacious"] { --space-y: 1.5rem; }
+
+:root[data-density="compact"] .p-6 { padding: 0.75rem; }
+:root[data-density="spacious"] .p-6 { padding: 2rem; }
+:root[data-density="compact"] .gap-4 { gap: 0.5rem; }
+:root[data-density="spacious"] .gap-4 { gap: 1.5rem; }
+
+.no-animations *, .no-animations *::before, .no-animations *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
+.high-contrast {
+  --border: 0 0% 0%;
+  --foreground: 0 0% 0%;
+  --muted-foreground: 0 0% 20%;
+}
+.high-contrast.dark {
+  --border: 0 0% 100%;
+  --foreground: 0 0% 100%;
+  --muted-foreground: 0 0% 85%;
+}
+
+/* Premium glass / gradient utilities */
+.glass-card {
+  background: linear-gradient(135deg, hsl(var(--card) / 0.85), hsl(var(--card) / 0.6));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid hsl(var(--border) / 0.6);
+}
+.gradient-primary {
+  background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.7));
+}
+.gradient-text {
+  background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.6));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.shadow-elegant {
+  box-shadow: 0 10px 30px -10px hsl(var(--primary) / 0.25), 0 4px 12px -4px hsl(220 20% 15% / 0.08);
+}
+.hover-lift {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px -10px hsl(var(--primary) / 0.35);
 }
