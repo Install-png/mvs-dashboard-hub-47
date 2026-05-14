@@ -270,6 +270,97 @@ const SettingsPage = () => {
           </Card>
         </TabsContent>
 
+        {/* Map */}
+        <TabsContent value="map" className="space-y-4 mt-4">
+          <Card className="hover-lift shadow-elegant">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><MapIcon className="h-5 w-5" />{t("settings.map.title")}</CardTitle>
+              <CardDescription>{t("settings.map.desc")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <Label className="mb-2 block">{t("settings.map.detail")}</Label>
+                <div className="grid sm:grid-cols-3 gap-2">
+                  {(["low","medium","high"] as MapDetail[]).map((d) => (
+                    <Button key={d} variant={map.detail === d ? "default" : "outline"} onClick={() => map.setPref("detail", d)}>
+                      {t(`settings.map.detail.${d}`)}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <Label className="mb-2 block">{t("settings.map.zoom")} — <span className="text-primary font-mono">{map.defaultZoom.toFixed(1)}×</span></Label>
+                <Slider min={1} max={8} step={0.5} value={[map.defaultZoom]} onValueChange={(v) => map.setPref("defaultZoom", v[0])} />
+              </div>
+
+              <div>
+                <Label className="mb-2 block">{t("settings.map.highlight")}</Label>
+                <div className="grid sm:grid-cols-3 gap-2">
+                  {(["heat","severity","flat"] as MapHighlight[]).map((h) => (
+                    <Button key={h} variant={map.highlight === h ? "default" : "outline"} onClick={() => map.setPref("highlight", h)}>
+                      {t(`settings.map.highlight.${h}`)}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <Label className="mb-2 block">{t("settings.map.markers")}</Label>
+                <div className="grid sm:grid-cols-3 gap-2">
+                  {(["dot","pin","pulse"] as MapMarker[]).map((m) => (
+                    <Button key={m} variant={map.marker === m ? "default" : "outline"} onClick={() => map.setPref("marker", m)}>
+                      {t(`settings.map.markers.${m}`)}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t">
+                <div>
+                  <Label>{t("settings.map.cluster")}</Label>
+                  <p className="text-xs text-muted-foreground">{t("settings.map.cluster.desc")}</p>
+                </div>
+                <Switch checked={map.cluster} onCheckedChange={(v) => map.setPref("cluster", v)} />
+              </div>
+              <div className="flex items-center justify-between">
+                <Label>{t("settings.map.labels")}</Label>
+                <Switch checked={map.showLabels} onCheckedChange={(v) => map.setPref("showLabels", v)} />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Language */}
+        <TabsContent value="language" className="space-y-4 mt-4">
+          <Card className="hover-lift shadow-elegant">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Globe className="h-5 w-5" />{t("settings.lang.title")}</CardTitle>
+              <CardDescription>{t("settings.lang.desc")}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {(["ua","en"] as Language[]).map((l) => (
+                  <button
+                    key={l}
+                    onClick={() => { setLang(l); toast.success(t("settings.lang.toast")); }}
+                    className={`p-4 rounded-lg border-2 text-left transition-all flex items-center gap-3 ${
+                      lang === l ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                    }`}
+                  >
+                    <span className="text-2xl">{l === "ua" ? "🇺🇦" : "🇬🇧"}</span>
+                    <div>
+                      <div className="font-semibold">{t(`settings.lang.${l}`)}</div>
+                      <div className="text-xs text-muted-foreground uppercase">{l}</div>
+                    </div>
+                    {lang === l && <Check className="ml-auto h-5 w-5 text-primary" />}
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* About / Tech stack */}
         <TabsContent value="about" className="space-y-4 mt-4">
           <Card className="shadow-elegant">
