@@ -418,9 +418,12 @@ const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, o
               const pulseSize = basePulse * invZoom;
               const coreSize = baseCore * invZoom;
 
+              const showPulse = mapPrefs.marker === "pulse" && (isOngoing || isContainment);
+              const isPin = mapPrefs.marker === "pin";
+
               return (
                 <g key={incident.id} filter="url(#marker-glow)">
-                  {(isOngoing || isContainment) && (
+                  {showPulse && (
                     <>
                       <circle cx={x} cy={y} r={pulseSize} fill={markerColor} opacity="0.15"
                         className={isOngoing ? "animate-ping" : undefined}
@@ -432,12 +435,25 @@ const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, o
                     <circle cx={x} cy={y} r={20 * invZoom} fill="none" stroke="hsl(24, 95%, 53%)" strokeWidth={2 * invZoom}
                       className="animate-ping" opacity="0.6" />
                   )}
-                  <circle cx={x} cy={y} r={coreSize} fill={markerColor}
-                    stroke={isHighlighted ? "hsl(24, 95%, 53%)" : "hsl(222, 47%, 10%)"} strokeWidth={(isHighlighted ? 2.5 : 1.5) * invZoom}
-                    className="cursor-pointer hover:opacity-80 transition-all"
-                    onMouseEnter={(e) => handleIncidentMouseEnter(e, incident)}
-                    onMouseLeave={handleIncidentMouseLeave}
-                    onClick={(e) => { e.stopPropagation(); if (!isPanning) onSelectIncident?.(incident); }} />
+                  {isPin ? (
+                    <path
+                      d={`M ${x} ${y - coreSize * 2} C ${x - coreSize} ${y - coreSize * 2}, ${x - coreSize} ${y}, ${x} ${y + coreSize * 0.5} C ${x + coreSize} ${y}, ${x + coreSize} ${y - coreSize * 2}, ${x} ${y - coreSize * 2} Z`}
+                      fill={markerColor}
+                      stroke={isHighlighted ? "hsl(24, 95%, 53%)" : "hsl(222, 47%, 10%)"}
+                      strokeWidth={(isHighlighted ? 2.5 : 1.5) * invZoom}
+                      className="cursor-pointer hover:opacity-80 transition-all"
+                      onMouseEnter={(e) => handleIncidentMouseEnter(e, incident)}
+                      onMouseLeave={handleIncidentMouseLeave}
+                      onClick={(e) => { e.stopPropagation(); if (!isPanning) onSelectIncident?.(incident); }}
+                    />
+                  ) : (
+                    <circle cx={x} cy={y} r={coreSize} fill={markerColor}
+                      stroke={isHighlighted ? "hsl(24, 95%, 53%)" : "hsl(222, 47%, 10%)"} strokeWidth={(isHighlighted ? 2.5 : 1.5) * invZoom}
+                      className="cursor-pointer hover:opacity-80 transition-all"
+                      onMouseEnter={(e) => handleIncidentMouseEnter(e, incident)}
+                      onMouseLeave={handleIncidentMouseLeave}
+                      onClick={(e) => { e.stopPropagation(); if (!isPanning) onSelectIncident?.(incident); }} />
+                  )}
                 </g>
               );
             } else {
