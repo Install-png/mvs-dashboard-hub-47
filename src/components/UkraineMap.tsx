@@ -351,7 +351,11 @@ const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, o
             const name = getRegionName(feature);
             const incCount = data?.activeIncidents ?? 0;
             const hasCritical = (data?.criticalCount ?? 0) > 0;
-            const fillColor = isSelected ? "url(#selected-grad)" : isHovered ? "hsl(215, 35%, 30%)" : getHeatmapColor(incCount, hasCritical);
+            const heatFill = getHeatmapColor(incCount, hasCritical);
+            const severityFill = hasCritical ? "hsl(0, 60%, 25%)" : incCount > 0 ? "hsl(30, 40%, 22%)" : "hsl(215, 20%, 16%)";
+            const flatFill = "hsl(215, 22%, 18%)";
+            const baseFill = mapPrefs.highlight === "severity" ? severityFill : mapPrefs.highlight === "flat" ? flatFill : heatFill;
+            const fillColor = isSelected ? "url(#selected-grad)" : isHovered ? "hsl(215, 35%, 30%)" : baseFill;
 
             return (
               <g key={id} className="cursor-pointer"
@@ -377,14 +381,15 @@ const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, o
                 <circle cx={city.x} cy={city.y} r={dotR}
                   fill={city.tier === 1 ? "hsl(45, 100%, 70%)" : "hsl(215, 60%, 70%)"}
                   stroke="hsl(222, 47%, 10%)" strokeWidth={0.5 * invZoom} />
-                <text x={city.x + dotR + 2 * invZoom} y={city.y + fontSize * 0.35}
-                  fontSize={fontSize} fill="hsl(215, 20%, 75%)" filter="url(#city-shadow)"
-                  fontFamily="system-ui, sans-serif" fontWeight={city.tier === 1 ? "600" : "400"}
-                  className="pointer-events-none">
-                  {city.name}
-                </text>
-                {/* Population label for tier 1 at higher zoom */}
-                {city.tier === 1 && zoom >= 2 && (
+                {mapPrefs.showLabels && (
+                  <text x={city.x + dotR + 2 * invZoom} y={city.y + fontSize * 0.35}
+                    fontSize={fontSize} fill="hsl(215, 20%, 75%)" filter="url(#city-shadow)"
+                    fontFamily="system-ui, sans-serif" fontWeight={city.tier === 1 ? "600" : "400"}
+                    className="pointer-events-none">
+                    {city.name}
+                  </text>
+                )}
+                {mapPrefs.showLabels && city.tier === 1 && zoom >= 2 && (
                   <text x={city.x + dotR + 2 * invZoom} y={city.y + fontSize * 0.35 + fontSize}
                     fontSize={6 * invZoom} fill="hsl(215, 20%, 50%)"
                     fontFamily="system-ui, sans-serif"
