@@ -16,12 +16,17 @@ import {
 } from "@/hooks/useUIPreferences";
 import {
   Sun, Moon, Keyboard, Palette, Type, LayoutGrid, Sparkles, Eye, RotateCcw, Code2, Info, Check,
+  Globe, MapIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useI18n, Language } from "@/hooks/useI18n";
+import { useMapPreferences, MapDetail, MapHighlight, MapMarker } from "@/hooks/useMapPreferences";
 
 const SettingsPage = () => {
   const { theme, toggleTheme } = useTheme();
   const prefs = useUIPreferences();
+  const { t, lang, setLang } = useI18n();
+  const map = useMapPreferences();
 
   const fontScales: { v: FontScale; label: string }[] = [
     { v: "sm", label: "Малий" },
@@ -53,23 +58,23 @@ const SettingsPage = () => {
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold gradient-text" style={{ fontFamily: "Montserrat, sans-serif" }}>
-            Налаштування інтерфейсу
+            {t("settings.title")}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Підлаштуйте систему під себе — кольори, шрифти, щільність та анімації застосовуються миттєво.
-          </p>
+          <p className="text-sm text-muted-foreground mt-1">{t("settings.subtitle")}</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => { prefs.reset(); toast.success("Налаштування скинуто"); }}>
-          <RotateCcw className="h-4 w-4 mr-2" /> Скинути
+        <Button variant="outline" size="sm" onClick={() => { prefs.reset(); map.reset(); toast.success(t("settings.reset.toast")); }}>
+          <RotateCcw className="h-4 w-4 mr-2" /> {t("settings.reset")}
         </Button>
       </div>
 
       <Tabs defaultValue="appearance" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="appearance"><Palette className="h-4 w-4 mr-2" />Вигляд</TabsTrigger>
-          <TabsTrigger value="typography"><Type className="h-4 w-4 mr-2" />Типографіка</TabsTrigger>
-          <TabsTrigger value="layout"><LayoutGrid className="h-4 w-4 mr-2" />Макет</TabsTrigger>
-          <TabsTrigger value="about"><Info className="h-4 w-4 mr-2" />Про систему</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-6">
+          <TabsTrigger value="appearance"><Palette className="h-4 w-4 mr-2" />{t("settings.tab.appearance")}</TabsTrigger>
+          <TabsTrigger value="typography"><Type className="h-4 w-4 mr-2" />{t("settings.tab.typography")}</TabsTrigger>
+          <TabsTrigger value="layout"><LayoutGrid className="h-4 w-4 mr-2" />{t("settings.tab.layout")}</TabsTrigger>
+          <TabsTrigger value="map"><MapIcon className="h-4 w-4 mr-2" />{t("settings.tab.map")}</TabsTrigger>
+          <TabsTrigger value="language"><Globe className="h-4 w-4 mr-2" />{t("settings.tab.language")}</TabsTrigger>
+          <TabsTrigger value="about"><Info className="h-4 w-4 mr-2" />{t("settings.tab.about")}</TabsTrigger>
         </TabsList>
 
         {/* Appearance */}
@@ -260,6 +265,97 @@ const SettingsPage = () => {
                   <span className="text-muted-foreground">Перемикання теми</span>
                   <kbd className="px-2 py-0.5 bg-muted rounded text-xs font-mono">Ctrl + J</kbd>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Map */}
+        <TabsContent value="map" className="space-y-4 mt-4">
+          <Card className="hover-lift shadow-elegant">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><MapIcon className="h-5 w-5" />{t("settings.map.title")}</CardTitle>
+              <CardDescription>{t("settings.map.desc")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <Label className="mb-2 block">{t("settings.map.detail")}</Label>
+                <div className="grid sm:grid-cols-3 gap-2">
+                  {(["low","medium","high"] as MapDetail[]).map((d) => (
+                    <Button key={d} variant={map.detail === d ? "default" : "outline"} onClick={() => map.setPref("detail", d)}>
+                      {t(`settings.map.detail.${d}`)}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <Label className="mb-2 block">{t("settings.map.zoom")} — <span className="text-primary font-mono">{map.defaultZoom.toFixed(1)}×</span></Label>
+                <Slider min={1} max={8} step={0.5} value={[map.defaultZoom]} onValueChange={(v) => map.setPref("defaultZoom", v[0])} />
+              </div>
+
+              <div>
+                <Label className="mb-2 block">{t("settings.map.highlight")}</Label>
+                <div className="grid sm:grid-cols-3 gap-2">
+                  {(["heat","severity","flat"] as MapHighlight[]).map((h) => (
+                    <Button key={h} variant={map.highlight === h ? "default" : "outline"} onClick={() => map.setPref("highlight", h)}>
+                      {t(`settings.map.highlight.${h}`)}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <Label className="mb-2 block">{t("settings.map.markers")}</Label>
+                <div className="grid sm:grid-cols-3 gap-2">
+                  {(["dot","pin","pulse"] as MapMarker[]).map((m) => (
+                    <Button key={m} variant={map.marker === m ? "default" : "outline"} onClick={() => map.setPref("marker", m)}>
+                      {t(`settings.map.markers.${m}`)}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t">
+                <div>
+                  <Label>{t("settings.map.cluster")}</Label>
+                  <p className="text-xs text-muted-foreground">{t("settings.map.cluster.desc")}</p>
+                </div>
+                <Switch checked={map.cluster} onCheckedChange={(v) => map.setPref("cluster", v)} />
+              </div>
+              <div className="flex items-center justify-between">
+                <Label>{t("settings.map.labels")}</Label>
+                <Switch checked={map.showLabels} onCheckedChange={(v) => map.setPref("showLabels", v)} />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Language */}
+        <TabsContent value="language" className="space-y-4 mt-4">
+          <Card className="hover-lift shadow-elegant">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Globe className="h-5 w-5" />{t("settings.lang.title")}</CardTitle>
+              <CardDescription>{t("settings.lang.desc")}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {(["ua","en"] as Language[]).map((l) => (
+                  <button
+                    key={l}
+                    onClick={() => { setLang(l); toast.success(t("settings.lang.toast")); }}
+                    className={`p-4 rounded-lg border-2 text-left transition-all flex items-center gap-3 ${
+                      lang === l ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                    }`}
+                  >
+                    <span className="text-2xl">{l === "ua" ? "🇺🇦" : "🇬🇧"}</span>
+                    <div>
+                      <div className="font-semibold">{t(`settings.lang.${l}`)}</div>
+                      <div className="text-xs text-muted-foreground uppercase">{l}</div>
+                    </div>
+                    {lang === l && <Check className="ml-auto h-5 w-5 text-primary" />}
+                  </button>
+                ))}
               </div>
             </CardContent>
           </Card>

@@ -6,13 +6,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/hooks/useTheme";
+import { useI18n } from "@/hooks/useI18n";
 
-const navItems = [
-  { label: "Дашборд", icon: LayoutDashboard, path: "/dashboard" },
-  { label: "Ситуаційний центр", icon: Map, path: "/situation-center" },
-  { label: "Календар", icon: CalendarDays, path: "/calendar" },
-  { label: "Звіти", icon: FileBarChart, path: "/reports" },
-  { label: "Налаштування", icon: Settings, path: "/settings" },
+const navItemsBase = [
+  { key: "nav.dashboard", icon: LayoutDashboard, path: "/dashboard" },
+  { key: "nav.situation", icon: Map, path: "/situation-center" },
+  { key: "nav.calendar", icon: CalendarDays, path: "/calendar" },
+  { key: "nav.reports", icon: FileBarChart, path: "/reports" },
+  { key: "nav.settings", icon: Settings, path: "/settings" },
 ];
 
 const AppSidebar = () => {
@@ -20,6 +21,7 @@ const AppSidebar = () => {
   const location = useLocation();
   const { signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { t } = useI18n();
 
   return (
     <aside className="hidden md:flex flex-col w-60 bg-sidebar-background text-sidebar-foreground border-r border-sidebar-border min-h-screen sticky top-0">
@@ -27,13 +29,13 @@ const AppSidebar = () => {
       <div className="flex items-center gap-3 px-5 py-5 border-b border-sidebar-border">
         <Shield className="h-7 w-7 text-sidebar-primary" />
         <span className="text-lg font-bold tracking-tight" style={{ fontFamily: "Montserrat, sans-serif" }}>
-          МВС Панель
+          {t("app.title")}
         </span>
       </div>
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1">
-        {navItems.map((item) => {
+        {navItemsBase.map((item) => {
           const active = location.pathname === item.path;
           return (
             <button
@@ -47,7 +49,7 @@ const AppSidebar = () => {
               )}
             >
               <item.icon className="h-5 w-5" />
-              {item.label}
+              {t(item.key)}
             </button>
           );
         })}
@@ -62,7 +64,7 @@ const AppSidebar = () => {
           onClick={toggleTheme}
         >
           {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-          {theme === "dark" ? "Світла тема" : "Темна тема"}
+          {theme === "dark" ? t("nav.theme.light") : t("nav.theme.dark")}
         </Button>
         <Button
           variant="ghost"
@@ -71,7 +73,7 @@ const AppSidebar = () => {
           onClick={async () => { await signOut(); navigate("/"); }}
         >
           <LogOut className="h-5 w-5" />
-          Вийти
+          {t("nav.signout")}
         </Button>
       </div>
     </aside>

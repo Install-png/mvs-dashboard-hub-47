@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import type { Topology, GeometryCollection } from "topojson-specification";
 import type { FeatureCollection, Feature, Geometry } from "geojson";
 import type { Incident, SeverityLevel } from "@/data/mockIncidents";
+import { useMapPreferences } from "@/hooks/useMapPreferences";
 
 export interface RegionData {
   id: string;
@@ -153,6 +154,7 @@ const MIN_ZOOM = 1;
 const MAX_ZOOM = 8;
 
 const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, onSelectIncident, hoveredIncidentId, highlightedIncidentId }: UkraineMapProps) => {
+  const mapPrefs = useMapPreferences();
   const [hoveredRegion, setHoveredRegion] = useState<string | null>(null);
   const [geoFeatures, setGeoFeatures] = useState<Feature<Geometry, RegionProperties>[]>([]);
   const [loading, setLoading] = useState(true);
@@ -161,10 +163,13 @@ const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, o
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // ═══ ZOOM / PAN STATE ═══
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(mapPrefs.defaultZoom);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+
+  // Apply default zoom when user changes it in settings
+  useEffect(() => { setZoom(mapPrefs.defaultZoom); setPan({ x: 0, y: 0 }); }, [mapPrefs.defaultZoom]);
 
   useEffect(() => {
     fetch("/ukraine-oblasts.json")
@@ -235,9 +240,11 @@ const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, o
   const zoomIn = useCallback(() => setZoom(z => Math.min(MAX_ZOOM, z + 0.5)), []);
   const zoomOut = useCallback(() => setZoom(z => Math.max(MIN_ZOOM, z - 0.5)), []);
 
-  // ═══ VISIBLE CITIES based on zoom ═══
+  // ═══ VISIBLE CITIES based on zoom + detail preference ═══
   const visibleCities = useMemo(() => {
     return UKRAINE_CITIES.filter(c => {
+      if (mapPrefs.detail === "low") return false;
+      if (mapPrefs.detail === "medium") return c.tier <= 2;
       if (c.tier === 1) return true;
       if (c.tier === 2) return zoom >= 1.5;
       return zoom >= 2.5;
@@ -245,7 +252,7 @@ const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, o
       const pt = projection(c.coords);
       return pt ? { ...c, x: pt[0], y: pt[1] } : null;
     }).filter(Boolean) as (CityData & { x: number; y: number })[];
-  }, [zoom, projection]);
+  }, [zoom, projection, mapPrefs.detail]);
 
   // ═══ TRANSFORM STRING ═══
   const transformStr = `translate(${pan.x}, ${pan.y}) scale(${zoom})`;
@@ -261,7 +268,12 @@ const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, o
       .filter(Boolean) as { incident: Incident; x: number; y: number }[];
   }, [incidents, projection]);
 
-  const clusters = useMemo(() => clusterIncidents(projectedIncidents, 20 * invZoom), [projectedIncidents, invZoom]);
+  const clusters = useMemo(
+    () => mapPrefs.cluster
+      ? clusterIncidents(projectedIncidents, 20 * invZoom)
+      : projectedIncidents.map((p) => ({ incidents: [p], x: p.x, y: p.y })),
+    [projectedIncidents, invZoom, mapPrefs.cluster]
+  );
 
   const handleRegionMouseEnter = (_e: React.MouseEvent, id: string, name: string) => {
     if (isPanning) return;
@@ -339,7 +351,11 @@ const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, o
             const name = getRegionName(feature);
             const incCount = data?.activeIncidents ?? 0;
             const hasCritical = (data?.criticalCount ?? 0) > 0;
-            const fillColor = isSelected ? "url(#selected-grad)" : isHovered ? "hsl(215, 35%, 30%)" : getHeatmapColor(incCount, hasCritical);
+            const heatFill = getHeatmapColor(incCount, hasCritical);
+            const severityFill = hasCritical ? "hsl(0, 60%, 25%)" : incCount > 0 ? "hsl(30, 40%, 22%)" : "hsl(215, 20%, 16%)";
+            const flatFill = "hsl(215, 22%, 18%)";
+            const baseFill = mapPrefs.highlight === "severity" ? severityFill : mapPrefs.highlight === "flat" ? flatFill : heatFill;
+            const fillColor = isSelected ? "url(#selected-grad)" : isHovered ? "hsl(215, 35%, 30%)" : baseFill;
 
             return (
               <g key={id} className="cursor-pointer"
@@ -365,14 +381,15 @@ const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, o
                 <circle cx={city.x} cy={city.y} r={dotR}
                   fill={city.tier === 1 ? "hsl(45, 100%, 70%)" : "hsl(215, 60%, 70%)"}
                   stroke="hsl(222, 47%, 10%)" strokeWidth={0.5 * invZoom} />
-                <text x={city.x + dotR + 2 * invZoom} y={city.y + fontSize * 0.35}
-                  fontSize={fontSize} fill="hsl(215, 20%, 75%)" filter="url(#city-shadow)"
-                  fontFamily="system-ui, sans-serif" fontWeight={city.tier === 1 ? "600" : "400"}
-                  className="pointer-events-none">
-                  {city.name}
-                </text>
-                {/* Population label for tier 1 at higher zoom */}
-                {city.tier === 1 && zoom >= 2 && (
+                {mapPrefs.showLabels && (
+                  <text x={city.x + dotR + 2 * invZoom} y={city.y + fontSize * 0.35}
+                    fontSize={fontSize} fill="hsl(215, 20%, 75%)" filter="url(#city-shadow)"
+                    fontFamily="system-ui, sans-serif" fontWeight={city.tier === 1 ? "600" : "400"}
+                    className="pointer-events-none">
+                    {city.name}
+                  </text>
+                )}
+                {mapPrefs.showLabels && city.tier === 1 && zoom >= 2 && (
                   <text x={city.x + dotR + 2 * invZoom} y={city.y + fontSize * 0.35 + fontSize}
                     fontSize={6 * invZoom} fill="hsl(215, 20%, 50%)"
                     fontFamily="system-ui, sans-serif"
@@ -401,9 +418,12 @@ const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, o
               const pulseSize = basePulse * invZoom;
               const coreSize = baseCore * invZoom;
 
+              const showPulse = mapPrefs.marker === "pulse" && (isOngoing || isContainment);
+              const isPin = mapPrefs.marker === "pin";
+
               return (
                 <g key={incident.id} filter="url(#marker-glow)">
-                  {(isOngoing || isContainment) && (
+                  {showPulse && (
                     <>
                       <circle cx={x} cy={y} r={pulseSize} fill={markerColor} opacity="0.15"
                         className={isOngoing ? "animate-ping" : undefined}
@@ -415,12 +435,25 @@ const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, o
                     <circle cx={x} cy={y} r={20 * invZoom} fill="none" stroke="hsl(24, 95%, 53%)" strokeWidth={2 * invZoom}
                       className="animate-ping" opacity="0.6" />
                   )}
-                  <circle cx={x} cy={y} r={coreSize} fill={markerColor}
-                    stroke={isHighlighted ? "hsl(24, 95%, 53%)" : "hsl(222, 47%, 10%)"} strokeWidth={(isHighlighted ? 2.5 : 1.5) * invZoom}
-                    className="cursor-pointer hover:opacity-80 transition-all"
-                    onMouseEnter={(e) => handleIncidentMouseEnter(e, incident)}
-                    onMouseLeave={handleIncidentMouseLeave}
-                    onClick={(e) => { e.stopPropagation(); if (!isPanning) onSelectIncident?.(incident); }} />
+                  {isPin ? (
+                    <path
+                      d={`M ${x} ${y - coreSize * 2} C ${x - coreSize} ${y - coreSize * 2}, ${x - coreSize} ${y}, ${x} ${y + coreSize * 0.5} C ${x + coreSize} ${y}, ${x + coreSize} ${y - coreSize * 2}, ${x} ${y - coreSize * 2} Z`}
+                      fill={markerColor}
+                      stroke={isHighlighted ? "hsl(24, 95%, 53%)" : "hsl(222, 47%, 10%)"}
+                      strokeWidth={(isHighlighted ? 2.5 : 1.5) * invZoom}
+                      className="cursor-pointer hover:opacity-80 transition-all"
+                      onMouseEnter={(e) => handleIncidentMouseEnter(e, incident)}
+                      onMouseLeave={handleIncidentMouseLeave}
+                      onClick={(e) => { e.stopPropagation(); if (!isPanning) onSelectIncident?.(incident); }}
+                    />
+                  ) : (
+                    <circle cx={x} cy={y} r={coreSize} fill={markerColor}
+                      stroke={isHighlighted ? "hsl(24, 95%, 53%)" : "hsl(222, 47%, 10%)"} strokeWidth={(isHighlighted ? 2.5 : 1.5) * invZoom}
+                      className="cursor-pointer hover:opacity-80 transition-all"
+                      onMouseEnter={(e) => handleIncidentMouseEnter(e, incident)}
+                      onMouseLeave={handleIncidentMouseLeave}
+                      onClick={(e) => { e.stopPropagation(); if (!isPanning) onSelectIncident?.(incident); }} />
+                  )}
                 </g>
               );
             } else {
