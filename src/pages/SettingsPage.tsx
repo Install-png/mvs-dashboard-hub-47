@@ -16,12 +16,17 @@ import {
 } from "@/hooks/useUIPreferences";
 import {
   Sun, Moon, Keyboard, Palette, Type, LayoutGrid, Sparkles, Eye, RotateCcw, Code2, Info, Check,
+  Globe, MapIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useI18n, Language } from "@/hooks/useI18n";
+import { useMapPreferences, MapDetail, MapHighlight, MapMarker } from "@/hooks/useMapPreferences";
 
 const SettingsPage = () => {
   const { theme, toggleTheme } = useTheme();
   const prefs = useUIPreferences();
+  const { t, lang, setLang } = useI18n();
+  const map = useMapPreferences();
 
   const fontScales: { v: FontScale; label: string }[] = [
     { v: "sm", label: "Малий" },
