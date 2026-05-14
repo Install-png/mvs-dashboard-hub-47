@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import type { Topology, GeometryCollection } from "topojson-specification";
 import type { FeatureCollection, Feature, Geometry } from "geojson";
 import type { Incident, SeverityLevel } from "@/data/mockIncidents";
+import { useMapPreferences } from "@/hooks/useMapPreferences";
 
 export interface RegionData {
   id: string;
@@ -153,6 +154,7 @@ const MIN_ZOOM = 1;
 const MAX_ZOOM = 8;
 
 const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, onSelectIncident, hoveredIncidentId, highlightedIncidentId }: UkraineMapProps) => {
+  const mapPrefs = useMapPreferences();
   const [hoveredRegion, setHoveredRegion] = useState<string | null>(null);
   const [geoFeatures, setGeoFeatures] = useState<Feature<Geometry, RegionProperties>[]>([]);
   const [loading, setLoading] = useState(true);
@@ -161,10 +163,13 @@ const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, o
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // ═══ ZOOM / PAN STATE ═══
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(mapPrefs.defaultZoom);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+
+  // Apply default zoom when user changes it in settings
+  useEffect(() => { setZoom(mapPrefs.defaultZoom); setPan({ x: 0, y: 0 }); }, [mapPrefs.defaultZoom]);
 
   useEffect(() => {
     fetch("/ukraine-oblasts.json")
@@ -261,7 +266,12 @@ const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, o
       .filter(Boolean) as { incident: Incident; x: number; y: number }[];
   }, [incidents, projection]);
 
-  const clusters = useMemo(() => clusterIncidents(projectedIncidents, 20 * invZoom), [projectedIncidents, invZoom]);
+  const clusters = useMemo(
+    () => mapPrefs.cluster
+      ? clusterIncidents(projectedIncidents, 20 * invZoom)
+      : projectedIncidents.map((p) => ({ incidents: [p], x: p.x, y: p.y })),
+    [projectedIncidents, invZoom, mapPrefs.cluster]
+  );
 
   const handleRegionMouseEnter = (_e: React.MouseEvent, id: string, name: string) => {
     if (isPanning) return;
