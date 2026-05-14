@@ -240,9 +240,11 @@ const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, o
   const zoomIn = useCallback(() => setZoom(z => Math.min(MAX_ZOOM, z + 0.5)), []);
   const zoomOut = useCallback(() => setZoom(z => Math.max(MIN_ZOOM, z - 0.5)), []);
 
-  // ═══ VISIBLE CITIES based on zoom ═══
+  // ═══ VISIBLE CITIES based on zoom + detail preference ═══
   const visibleCities = useMemo(() => {
     return UKRAINE_CITIES.filter(c => {
+      if (mapPrefs.detail === "low") return false;
+      if (mapPrefs.detail === "medium") return c.tier <= 2;
       if (c.tier === 1) return true;
       if (c.tier === 2) return zoom >= 1.5;
       return zoom >= 2.5;
@@ -250,7 +252,7 @@ const UkraineMap = memo(({ regions, incidents, selectedRegion, onSelectRegion, o
       const pt = projection(c.coords);
       return pt ? { ...c, x: pt[0], y: pt[1] } : null;
     }).filter(Boolean) as (CityData & { x: number; y: number })[];
-  }, [zoom, projection]);
+  }, [zoom, projection, mapPrefs.detail]);
 
   // ═══ TRANSFORM STRING ═══
   const transformStr = `translate(${pan.x}, ${pan.y}) scale(${zoom})`;
