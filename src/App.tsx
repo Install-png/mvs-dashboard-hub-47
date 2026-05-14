@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { UIPreferencesProvider } from "@/hooks/useUIPreferences";
+import { I18nProvider } from "@/hooks/useI18n";
+import { MapPreferencesProvider } from "@/hooks/useMapPreferences";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import DashboardLayout from "@/components/DashboardLayout";
 import Index from "./pages/Index";
@@ -23,6 +25,8 @@ const App = () => (
     <AuthProvider>
       <ThemeProvider>
         <UIPreferencesProvider>
+        <I18nProvider>
+        <MapPreferencesProvider>
         <TooltipProvider>
           <Toaster />
           <Sonner />
@@ -40,6 +44,8 @@ const App = () => (
             </Routes>
           </BrowserRouter>
         </TooltipProvider>
+        </MapPreferencesProvider>
+        </I18nProvider>
         </UIPreferencesProvider>
       </ThemeProvider>
     </AuthProvider>
