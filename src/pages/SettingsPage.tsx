@@ -58,23 +58,23 @@ const SettingsPage = () => {
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold gradient-text" style={{ fontFamily: "Montserrat, sans-serif" }}>
-            Налаштування інтерфейсу
+            {t("settings.title")}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Підлаштуйте систему під себе — кольори, шрифти, щільність та анімації застосовуються миттєво.
-          </p>
+          <p className="text-sm text-muted-foreground mt-1">{t("settings.subtitle")}</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => { prefs.reset(); toast.success("Налаштування скинуто"); }}>
-          <RotateCcw className="h-4 w-4 mr-2" /> Скинути
+        <Button variant="outline" size="sm" onClick={() => { prefs.reset(); map.reset(); toast.success(t("settings.reset.toast")); }}>
+          <RotateCcw className="h-4 w-4 mr-2" /> {t("settings.reset")}
         </Button>
       </div>
 
       <Tabs defaultValue="appearance" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="appearance"><Palette className="h-4 w-4 mr-2" />Вигляд</TabsTrigger>
-          <TabsTrigger value="typography"><Type className="h-4 w-4 mr-2" />Типографіка</TabsTrigger>
-          <TabsTrigger value="layout"><LayoutGrid className="h-4 w-4 mr-2" />Макет</TabsTrigger>
-          <TabsTrigger value="about"><Info className="h-4 w-4 mr-2" />Про систему</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-6">
+          <TabsTrigger value="appearance"><Palette className="h-4 w-4 mr-2" />{t("settings.tab.appearance")}</TabsTrigger>
+          <TabsTrigger value="typography"><Type className="h-4 w-4 mr-2" />{t("settings.tab.typography")}</TabsTrigger>
+          <TabsTrigger value="layout"><LayoutGrid className="h-4 w-4 mr-2" />{t("settings.tab.layout")}</TabsTrigger>
+          <TabsTrigger value="map"><MapIcon className="h-4 w-4 mr-2" />{t("settings.tab.map")}</TabsTrigger>
+          <TabsTrigger value="language"><Globe className="h-4 w-4 mr-2" />{t("settings.tab.language")}</TabsTrigger>
+          <TabsTrigger value="about"><Info className="h-4 w-4 mr-2" />{t("settings.tab.about")}</TabsTrigger>
         </TabsList>
 
         {/* Appearance */}
