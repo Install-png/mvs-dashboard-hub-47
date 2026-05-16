@@ -69,12 +69,13 @@ const SettingsPage = () => {
       </div>
 
       <Tabs defaultValue="appearance" className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="appearance"><Palette className="h-4 w-4 mr-2" />{t("settings.tab.appearance")}</TabsTrigger>
           <TabsTrigger value="typography"><Type className="h-4 w-4 mr-2" />{t("settings.tab.typography")}</TabsTrigger>
           <TabsTrigger value="layout"><LayoutGrid className="h-4 w-4 mr-2" />{t("settings.tab.layout")}</TabsTrigger>
           <TabsTrigger value="map"><MapIcon className="h-4 w-4 mr-2" />{t("settings.tab.map")}</TabsTrigger>
           <TabsTrigger value="language"><Globe className="h-4 w-4 mr-2" />{t("settings.tab.language")}</TabsTrigger>
+          <TabsTrigger value="roles"><Shield className="h-4 w-4 mr-2" />Ролі</TabsTrigger>
           <TabsTrigger value="about"><Info className="h-4 w-4 mr-2" />{t("settings.tab.about")}</TabsTrigger>
         </TabsList>
 
