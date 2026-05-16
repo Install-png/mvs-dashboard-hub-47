@@ -16,8 +16,9 @@ import {
 } from "@/hooks/useUIPreferences";
 import {
   Sun, Moon, Keyboard, Palette, Type, LayoutGrid, Sparkles, Eye, RotateCcw, Code2, Info, Check,
-  Globe, MapIcon,
+  Globe, MapIcon, Shield,
 } from "lucide-react";
+import RolesAdmin from "@/components/RolesAdmin";
 import { toast } from "sonner";
 import { useI18n, Language } from "@/hooks/useI18n";
 import { useMapPreferences, MapDetail, MapHighlight, MapMarker } from "@/hooks/useMapPreferences";
@@ -68,12 +69,13 @@ const SettingsPage = () => {
       </div>
 
       <Tabs defaultValue="appearance" className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="appearance"><Palette className="h-4 w-4 mr-2" />{t("settings.tab.appearance")}</TabsTrigger>
           <TabsTrigger value="typography"><Type className="h-4 w-4 mr-2" />{t("settings.tab.typography")}</TabsTrigger>
           <TabsTrigger value="layout"><LayoutGrid className="h-4 w-4 mr-2" />{t("settings.tab.layout")}</TabsTrigger>
           <TabsTrigger value="map"><MapIcon className="h-4 w-4 mr-2" />{t("settings.tab.map")}</TabsTrigger>
           <TabsTrigger value="language"><Globe className="h-4 w-4 mr-2" />{t("settings.tab.language")}</TabsTrigger>
+          <TabsTrigger value="roles"><Shield className="h-4 w-4 mr-2" />Ролі</TabsTrigger>
           <TabsTrigger value="about"><Info className="h-4 w-4 mr-2" />{t("settings.tab.about")}</TabsTrigger>
         </TabsList>
 
@@ -362,6 +364,10 @@ const SettingsPage = () => {
         </TabsContent>
 
         {/* About / Tech stack */}
+        <TabsContent value="roles" className="space-y-4 mt-4">
+          <RolesAdmin />
+        </TabsContent>
+
         <TabsContent value="about" className="space-y-4 mt-4">
           <Card className="shadow-elegant">
             <CardHeader>
