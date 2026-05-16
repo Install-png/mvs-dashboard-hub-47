@@ -16,8 +16,9 @@ import {
 } from "@/hooks/useUIPreferences";
 import {
   Sun, Moon, Keyboard, Palette, Type, LayoutGrid, Sparkles, Eye, RotateCcw, Code2, Info, Check,
-  Globe, MapIcon,
+  Globe, MapIcon, Shield,
 } from "lucide-react";
+import RolesAdmin from "@/components/RolesAdmin";
 import { toast } from "sonner";
 import { useI18n, Language } from "@/hooks/useI18n";
 import { useMapPreferences, MapDetail, MapHighlight, MapMarker } from "@/hooks/useMapPreferences";
