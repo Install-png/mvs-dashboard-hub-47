@@ -332,15 +332,84 @@ export type Database = {
         }
         Relationships: []
       }
+      user_privileges: {
+        Row: {
+          created_at: string
+          granted_by: string | null
+          id: string
+          privilege: Database["public"]["Enums"]["app_privilege"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          privilege: Database["public"]["Enums"]["app_privilege"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          privilege?: Database["public"]["Enums"]["app_privilege"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          granted_by: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
       auto_archive_calendar_events: { Args: never; Returns: undefined }
+      has_privilege: {
+        Args: {
+          _privilege: Database["public"]["Enums"]["app_privilege"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_privilege:
+        | "manage_incidents"
+        | "manage_calendar"
+        | "manage_reports"
+        | "manage_users"
+        | "export_data"
+        | "view_audit_log"
+      app_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -467,6 +536,16 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_privilege: [
+        "manage_incidents",
+        "manage_calendar",
+        "manage_reports",
+        "manage_users",
+        "export_data",
+        "view_audit_log",
+      ],
+      app_role: ["admin", "user"],
+    },
   },
 } as const
