@@ -364,6 +364,10 @@ const SettingsPage = () => {
         </TabsContent>
 
         {/* About / Tech stack */}
+        <TabsContent value="roles" className="space-y-4 mt-4">
+          <RolesAdmin />
+        </TabsContent>
+
         <TabsContent value="about" className="space-y-4 mt-4">
           <Card className="shadow-elegant">
             <CardHeader>
