@@ -165,6 +165,49 @@ const RolesAdmin = () => {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-primary" /> Додати користувача
+            </CardTitle>
+            <CardDescription>
+              Створіть новий акаунт та одразу призначте роль. Email підтверджується автоматично.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="nu-name">ПІБ</Label>
+                <Input id="nu-name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Іванов Іван" />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="nu-email">Email</Label>
+                <Input id="nu-email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="user@mia.gov.ua" />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="nu-pass">Тимчасовий пароль</Label>
+                <Input id="nu-pass" type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="мін. 6 символів" />
+              </div>
+              <div className="space-y-1">
+                <Label>Роль</Label>
+                <Select value={newRole} onValueChange={(v) => setNewRole(v as AppRole)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="user">Користувач (підрозділ)</SelectItem>
+                    <SelectItem value="admin">Адміністратор</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <Button onClick={createUser} disabled={creating}>
+              {creating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserPlus className="h-4 w-4 mr-2" />}
+              Створити акаунт
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-primary" /> Користувачі системи
             </CardTitle>
             <CardDescription>
