@@ -4,7 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Shield, ShieldCheck, User as UserIcon, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Shield, ShieldCheck, User as UserIcon, Loader2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { useUserRole, ALL_PRIVILEGES, AppPrivilege, AppRole } from "@/hooks/useUserRole";
 
@@ -19,6 +22,30 @@ const RolesAdmin = () => {
   const { isAdmin, role, privileges, loading: meLoading } = useUserRole();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newRole, setNewRole] = useState<AppRole>("user");
+  const [creating, setCreating] = useState(false);
+
+  const createUser = async () => {
+    if (!newEmail || newPassword.length < 6) {
+      toast.error("Введіть email та пароль (мін. 6 символів)");
+      return;
+    }
+    setCreating(true);
+    const { data, error } = await supabase.functions.invoke("admin-create-user", {
+      body: { email: newEmail, password: newPassword, full_name: newName, role: newRole },
+    });
+    setCreating(false);
+    if (error || (data as any)?.error) {
+      toast.error((data as any)?.error ?? error?.message ?? "Помилка створення");
+      return;
+    }
+    toast.success(`Користувача створено (${newRole === "admin" ? "адмін" : "користувач"})`);
+    setNewEmail(""); setNewPassword(""); setNewName(""); setNewRole("user");
+    load();
+  };
 
   const load = async () => {
     setLoading(true);
@@ -130,6 +157,49 @@ const RolesAdmin = () => {
           <CardContent className="pt-6 text-sm text-muted-foreground">
             Керування ролями та привілеями доступне лише головному адміністратору.
             Зверніться до Голови Ситуаційного центру для розширення прав.
+          </CardContent>
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-primary" /> Додати користувача
+            </CardTitle>
+            <CardDescription>
+              Створіть новий акаунт та одразу призначте роль. Email підтверджується автоматично.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="nu-name">ПІБ</Label>
+                <Input id="nu-name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Іванов Іван" />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="nu-email">Email</Label>
+                <Input id="nu-email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="user@mia.gov.ua" />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="nu-pass">Тимчасовий пароль</Label>
+                <Input id="nu-pass" type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="мін. 6 символів" />
+              </div>
+              <div className="space-y-1">
+                <Label>Роль</Label>
+                <Select value={newRole} onValueChange={(v) => setNewRole(v as AppRole)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="user">Користувач (підрозділ)</SelectItem>
+                    <SelectItem value="admin">Адміністратор</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <Button onClick={createUser} disabled={creating}>
+              {creating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserPlus className="h-4 w-4 mr-2" />}
+              Створити акаунт
+            </Button>
           </CardContent>
         </Card>
       )}
