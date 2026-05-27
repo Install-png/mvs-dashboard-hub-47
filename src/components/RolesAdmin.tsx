@@ -47,6 +47,7 @@ const RolesAdmin = () => {
     load();
   };
 
+  const load = async () => {
     setLoading(true);
     const [{ data: profiles }, { data: roles }, { data: privs }] = await Promise.all([
       supabase.from("profiles").select("id, full_name"),
