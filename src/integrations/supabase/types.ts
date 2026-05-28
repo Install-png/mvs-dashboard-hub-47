@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_assignments: {
+        Row: {
+          created_at: string
+          granted_by: string | null
+          id: string
+          region_id: string
+          region_name: string
+          service: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          region_id?: string
+          region_name?: string
+          service?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          region_id?: string
+          region_name?: string
+          service?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       calendar_events: {
         Row: {
           archived_at: string | null
@@ -233,6 +263,42 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          body: string
+          channel: string
+          created_at: string
+          id: string
+          incident_id: string | null
+          kind: string
+          read_at: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body?: string
+          channel?: string
+          created_at?: string
+          id?: string
+          incident_id?: string | null
+          kind?: string
+          read_at?: string | null
+          title?: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          channel?: string
+          created_at?: string
+          id?: string
+          incident_id?: string | null
+          kind?: string
+          read_at?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       personnel: {
         Row: {
           created_at: string
@@ -329,6 +395,133 @@ export type Database = {
           report_type?: string
           title?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      resource_dispatches: {
+        Row: {
+          created_at: string
+          dispatched_at: string
+          distance_km: number
+          eta_minutes: number
+          id: string
+          incident_id: string
+          resource_id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          dispatched_at?: string
+          distance_km?: number
+          eta_minutes?: number
+          id?: string
+          incident_id: string
+          resource_id: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          dispatched_at?: string
+          distance_km?: number
+          eta_minutes?: number
+          id?: string
+          incident_id?: string
+          resource_id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resource_dispatches_resource_id_fkey"
+            columns: ["resource_id"]
+            isOneToOne: false
+            referencedRelation: "resources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      resources: {
+        Row: {
+          created_at: string
+          id: string
+          is_reserve: boolean
+          label: string
+          quantity: number
+          status: string
+          type: string
+          unit_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_reserve?: boolean
+          label?: string
+          quantity?: number
+          status?: string
+          type: string
+          unit_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_reserve?: boolean
+          label?: string
+          quantity?: number
+          status?: string
+          type?: string
+          unit_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resources_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      units: {
+        Row: {
+          city: string
+          created_at: string
+          id: string
+          lat: number
+          lng: number
+          name: string
+          region_id: string
+          region_name: string
+          service: string
+          updated_at: string
+        }
+        Insert: {
+          city?: string
+          created_at?: string
+          id?: string
+          lat?: number
+          lng?: number
+          name: string
+          region_id?: string
+          region_name?: string
+          service: string
+          updated_at?: string
+        }
+        Update: {
+          city?: string
+          created_at?: string
+          id?: string
+          lat?: number
+          lng?: number
+          name?: string
+          region_id?: string
+          region_name?: string
+          service?: string
+          updated_at?: string
         }
         Relationships: []
       }
