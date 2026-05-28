@@ -1,7 +1,7 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  Shield, LayoutDashboard, CalendarDays, FileBarChart, Settings, LogOut, Sun, Moon, Map,
+  Shield, LayoutDashboard, CalendarDays, FileBarChart, Settings, LogOut, Sun, Moon, Map, Boxes,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,7 @@ import { useI18n } from "@/hooks/useI18n";
 const navItemsBase = [
   { key: "nav.dashboard", icon: LayoutDashboard, path: "/dashboard" },
   { key: "nav.situation", icon: Map, path: "/situation-center" },
+  { key: "nav.resources", icon: Boxes, path: "/resources", fallback: "Ресурси" },
   { key: "nav.calendar", icon: CalendarDays, path: "/calendar" },
   { key: "nav.reports", icon: FileBarChart, path: "/reports" },
   { key: "nav.settings", icon: Settings, path: "/settings" },
@@ -49,7 +50,7 @@ const AppSidebar = () => {
               )}
             >
               <item.icon className="h-5 w-5" />
-              {t(item.key)}
+              {(() => { const v = t(item.key); return v === item.key && (item as any).fallback ? (item as any).fallback : v; })()}
             </button>
           );
         })}
