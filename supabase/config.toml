@@ -2,3 +2,6 @@ project_id = "qpakudcwjvajpfbxcbzl"
 
 [functions.admin-create-user]
 verify_jwt = true
+
+[functions.notify-incident-responders]
+verify_jwt = true
