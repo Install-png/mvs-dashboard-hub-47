@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Shield, ShieldCheck, User as UserIcon, Loader2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { useUserRole, ALL_PRIVILEGES, AppPrivilege, AppRole } from "@/hooks/useUserRole";
+import AssignmentsAdmin from "@/components/AssignmentsAdmin";
 
 interface Row {
   id: string;
@@ -275,6 +276,8 @@ const RolesAdmin = () => {
           </CardContent>
         </Card>
       )}
+
+      <AssignmentsAdmin />
     </div>
   );
 };
