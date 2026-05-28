@@ -214,6 +214,14 @@ export function useIncidents() {
         .single();
       if (error) { console.error(error); toast.error("Помилка створення"); return null; }
       await logAudit(user.id, data.id, "create", { title: inc.title, type: inc.type, severity: inc.severity });
+      // Fire-and-forget responder notifications (in-app + email if configured)
+      supabase.functions.invoke("notify-incident-responders", {
+        body: { incident: {
+          id: data.id, region_id: data.region_id, region_name: data.region_name,
+          service: data.service || data.lead_agency, title: data.title, type: data.type,
+          severity: data.severity, address: data.address,
+        } },
+      }).catch(() => {});
       toast.success("Інцидент створено");
       return rowToIncident(data);
     },
