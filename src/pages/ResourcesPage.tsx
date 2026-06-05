@@ -124,6 +124,7 @@ const ResourcesPage = () => {
       <Tabs defaultValue="list">
         <TabsList>
           <TabsTrigger value="list"><Warehouse className="h-4 w-4 mr-2" />Підрозділи та ресурси</TabsTrigger>
+          <TabsTrigger value="monitor"><MapPin className="h-4 w-4 mr-2" />Моніторинг по областях (ПТО)</TabsTrigger>
           {isAdmin && <TabsTrigger value="add"><Plus className="h-4 w-4 mr-2" />Додати</TabsTrigger>}
         </TabsList>
 
