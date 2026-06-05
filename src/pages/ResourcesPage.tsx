@@ -245,3 +245,104 @@ const ResourcesPage = () => {
 };
 
 export default ResourcesPage;
+
+function RegionMonitor({ units, resources, isAdmin }: { units: any[]; resources: any[]; isAdmin: boolean }) {
+  const byRegion = useMemo(() => {
+    const map = new Map<string, { region_id: string; region_name: string; units: any[]; res: any[] }>();
+    REGIONS.forEach((r) => map.set(r.id, { region_id: r.id, region_name: r.name, units: [], res: [] }));
+    units.forEach((u) => {
+      const g = map.get(u.region_id);
+      if (g) g.units.push(u);
+    });
+    resources.forEach((r) => {
+      const u = units.find((x) => x.id === r.unit_id);
+      if (!u) return;
+      const g = map.get(u.region_id);
+      if (g) g.res.push({ ...r, unit: u });
+    });
+    return Array.from(map.values()).filter((g) => g.units.length > 0 || g.res.length > 0);
+  }, [units, resources]);
+
+  const sendToPTO = async (r: any) => {
+    const { error } = await supabase.from("resources").update({ status: "maintenance", is_reserve: false }).eq("id", r.id);
+    if (error) return toast.error(error.message);
+    toast.success("Направлено на ПТО");
+  };
+  const returnFromPTO = async (r: any) => {
+    const { error } = await supabase.from("resources").update({ status: "available" }).eq("id", r.id);
+    if (error) return toast.error(error.message);
+    toast.success("Повернено зі служби ПТО");
+  };
+
+  if (byRegion.length === 0) {
+    return <Card><CardContent className="pt-6 text-center text-muted-foreground">Немає підрозділів у жодній області. Додайте підрозділи, щоб бачити моніторинг ПТО.</CardContent></Card>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {byRegion.map((g) => {
+        const total = g.res.reduce((s, r) => s + r.quantity, 0);
+        const maint = g.res.filter((r) => r.status === "maintenance").reduce((s, r) => s + r.quantity, 0);
+        const available = g.res.filter((r) => r.status === "available").reduce((s, r) => s + r.quantity, 0);
+        const deployed = g.res.filter((r) => r.status === "deployed").reduce((s, r) => s + r.quantity, 0);
+        const reserve = g.res.filter((r) => r.is_reserve).reduce((s, r) => s + r.quantity, 0);
+        const ptoPct = total ? Math.round((maint / total) * 100) : 0;
+        const alert = total > 0 && available / Math.max(total, 1) < 0.3;
+        return (
+          <Card key={g.region_id} className={alert ? "border-destructive/50" : ""}>
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between flex-wrap gap-2">
+                <CardTitle className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-primary" />{g.region_name}
+                  {alert && <Badge variant="destructive" className="gap-1"><AlertTriangle className="h-3 w-3" />Дефіцит</Badge>}
+                </CardTitle>
+                <div className="text-xs text-muted-foreground">Підрозділів: {g.units.length} · Од. техніки: {total}</div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                <div className="rounded-md border p-2"><div className="text-xs text-muted-foreground">Готова</div><div className="text-lg font-bold text-green-500">{available}</div></div>
+                <div className="rounded-md border p-2"><div className="text-xs text-muted-foreground">У дії</div><div className="text-lg font-bold text-orange-500">{deployed}</div></div>
+                <div className="rounded-md border p-2"><div className="text-xs text-muted-foreground">Резерв</div><div className="text-lg font-bold text-amber-500">{reserve}</div></div>
+                <div className="rounded-md border p-2"><div className="text-xs text-muted-foreground">На ПТО</div><div className="text-lg font-bold text-blue-500">{maint}</div></div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                  <span className="flex items-center gap-1"><Wrench className="h-3 w-3" />Завантаженість ПТО</span>
+                  <span>{ptoPct}%</span>
+                </div>
+                <Progress value={ptoPct} />
+              </div>
+
+              {g.res.length > 0 && (
+                <div className="space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground">Техніка регіону:</div>
+                  <div className="grid sm:grid-cols-2 gap-1.5">
+                    {g.res.map((r) => (
+                      <div key={r.id} className="flex items-center justify-between gap-2 border rounded-md p-2 text-sm">
+                        <div className="min-w-0">
+                          <div className="truncate">{r.type} <span className="text-xs text-muted-foreground">×{r.quantity}</span></div>
+                          <div className="text-xs text-muted-foreground truncate">{r.unit.name} · {r.unit.city}</div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Badge variant={r.status === "available" ? "default" : r.status === "maintenance" ? "secondary" : r.status === "deployed" ? "destructive" : "outline"} className="text-[10px]">
+                            {r.status === "available" ? "Готова" : r.status === "maintenance" ? "ПТО" : r.status === "deployed" ? "У дії" : "Резерв"}
+                          </Badge>
+                          {isAdmin && (r.status === "maintenance"
+                            ? <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => returnFromPTO(r)}>Повернути</Button>
+                            : <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => sendToPTO(r)}><Wrench className="h-3 w-3 mr-1" />ПТО</Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
