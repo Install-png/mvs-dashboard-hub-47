@@ -188,6 +188,10 @@ const ResourcesPage = () => {
           )}
         </TabsContent>
 
+        <TabsContent value="monitor" className="mt-4">
+          <RegionMonitor units={units} resources={resources} isAdmin={isAdmin} />
+        </TabsContent>
+
         {isAdmin && (
           <TabsContent value="add" className="mt-4 space-y-4">
             <Card>
