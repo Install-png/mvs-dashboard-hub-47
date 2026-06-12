@@ -442,6 +442,39 @@ export type Database = {
           },
         ]
       }
+      resource_status_log: {
+        Row: {
+          action: string
+          created_at: string
+          from_status: string
+          id: string
+          note: string
+          resource_id: string
+          to_status: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          from_status?: string
+          id?: string
+          note?: string
+          resource_id: string
+          to_status?: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          from_status?: string
+          id?: string
+          note?: string
+          resource_id?: string
+          to_status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       resources: {
         Row: {
           created_at: string
