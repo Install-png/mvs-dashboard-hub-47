@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Boxes, Building2, Plus, Trash2, Truck, Loader2, Warehouse, Wrench, MapPin, AlertTriangle } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Boxes, Building2, Plus, Trash2, Truck, Loader2, Warehouse, Wrench, MapPin, AlertTriangle, History, Filter, X } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,6 +18,7 @@ import { REGION_NAME_MAP } from "@/components/UkraineMap";
 
 const SERVICES = ["ДСНС", "Поліція", "Нацгвардія", "Швидка допомога"];
 const REGIONS = Object.entries(REGION_NAME_MAP).map(([id, name]) => ({ id, name }));
+const ALL = "__all__";
 
 const ResourcesPage = () => {
   const { isAdmin } = useUserRole();
@@ -246,41 +248,108 @@ const ResourcesPage = () => {
 
 export default ResourcesPage;
 
+async function logStatusChange(resource_id: string, action: string, from_status: string, to_status: string) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+  await supabase.from("resource_status_log").insert({
+    resource_id, user_id: user.id, action, from_status, to_status,
+  });
+}
+
 function RegionMonitor({ units, resources, isAdmin }: { units: any[]; resources: any[]; isAdmin: boolean }) {
+  const [fRegion, setFRegion] = useState<string>(ALL);
+  const [fService, setFService] = useState<string>(ALL);
+  const [fType, setFType] = useState<string>(ALL);
+  const [historyRegion, setHistoryRegion] = useState<{ id: string; name: string } | null>(null);
+
+  const filteredUnits = useMemo(() => units.filter((u) =>
+    (fRegion === ALL || u.region_id === fRegion) &&
+    (fService === ALL || u.service === fService)
+  ), [units, fRegion, fService]);
+
+  const filteredResources = useMemo(() => {
+    const unitIds = new Set(filteredUnits.map((u) => u.id));
+    return resources.filter((r) => unitIds.has(r.unit_id) && (fType === ALL || r.type === fType));
+  }, [resources, filteredUnits, fType]);
+
   const byRegion = useMemo(() => {
     const map = new Map<string, { region_id: string; region_name: string; units: any[]; res: any[] }>();
     REGIONS.forEach((r) => map.set(r.id, { region_id: r.id, region_name: r.name, units: [], res: [] }));
-    units.forEach((u) => {
+    filteredUnits.forEach((u) => {
       const g = map.get(u.region_id);
       if (g) g.units.push(u);
     });
-    resources.forEach((r) => {
+    filteredResources.forEach((r) => {
       const u = units.find((x) => x.id === r.unit_id);
       if (!u) return;
       const g = map.get(u.region_id);
       if (g) g.res.push({ ...r, unit: u });
     });
     return Array.from(map.values()).filter((g) => g.units.length > 0 || g.res.length > 0);
-  }, [units, resources]);
+  }, [filteredUnits, filteredResources, units]);
 
   const sendToPTO = async (r: any) => {
     const { error } = await supabase.from("resources").update({ status: "maintenance", is_reserve: false }).eq("id", r.id);
     if (error) return toast.error(error.message);
+    await logStatusChange(r.id, "send_to_pto", r.status, "maintenance");
     toast.success("Направлено на ПТО");
   };
   const returnFromPTO = async (r: any) => {
     const { error } = await supabase.from("resources").update({ status: "available" }).eq("id", r.id);
     if (error) return toast.error(error.message);
+    await logStatusChange(r.id, "return_from_pto", r.status, "available");
     toast.success("Повернено зі служби ПТО");
   };
 
-  if (byRegion.length === 0) {
-    return <Card><CardContent className="pt-6 text-center text-muted-foreground">Немає підрозділів у жодній області. Додайте підрозділи, щоб бачити моніторинг ПТО.</CardContent></Card>;
-  }
+  const hasFilters = fRegion !== ALL || fService !== ALL || fType !== ALL;
+  const resetFilters = () => { setFRegion(ALL); setFService(ALL); setFType(ALL); };
 
   return (
     <div className="space-y-3">
-      {byRegion.map((g) => {
+      <Card>
+        <CardContent className="pt-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex items-center gap-2 text-sm font-medium"><Filter className="h-4 w-4" />Фільтри</div>
+            <div className="space-y-1 min-w-[180px]">
+              <Label className="text-xs">Область</Label>
+              <Select value={fRegion} onValueChange={setFRegion}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>Усі області</SelectItem>
+                  {REGIONS.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1 min-w-[160px]">
+              <Label className="text-xs">Служба</Label>
+              <Select value={fService} onValueChange={setFService}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>Усі служби</SelectItem>
+                  {SERVICES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1 min-w-[200px]">
+              <Label className="text-xs">Тип ресурсу</Label>
+              <Select value={fType} onValueChange={setFType}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>Усі типи</SelectItem>
+                  {RESOURCE_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {hasFilters && (
+              <Button variant="ghost" size="sm" onClick={resetFilters}><X className="h-4 w-4 mr-1" />Скинути</Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {byRegion.length === 0 ? (
+        <Card><CardContent className="pt-6 text-center text-muted-foreground">Немає даних за обраними фільтрами.</CardContent></Card>
+      ) : byRegion.map((g) => {
         const total = g.res.reduce((s, r) => s + r.quantity, 0);
         const maint = g.res.filter((r) => r.status === "maintenance").reduce((s, r) => s + r.quantity, 0);
         const available = g.res.filter((r) => r.status === "available").reduce((s, r) => s + r.quantity, 0);
@@ -296,7 +365,12 @@ function RegionMonitor({ units, resources, isAdmin }: { units: any[]; resources:
                   <MapPin className="h-5 w-5 text-primary" />{g.region_name}
                   {alert && <Badge variant="destructive" className="gap-1"><AlertTriangle className="h-3 w-3" />Дефіцит</Badge>}
                 </CardTitle>
-                <div className="text-xs text-muted-foreground">Підрозділів: {g.units.length} · Од. техніки: {total}</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-xs text-muted-foreground">Підрозділів: {g.units.length} · Од. техніки: {total}</div>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setHistoryRegion({ id: g.region_id, name: g.region_name })}>
+                    <History className="h-3 w-3 mr-1" />Історія ПТО
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -342,7 +416,103 @@ function RegionMonitor({ units, resources, isAdmin }: { units: any[]; resources:
           </Card>
         );
       })}
+
+      <RegionHistoryDialog
+        region={historyRegion}
+        onOpenChange={(open) => !open && setHistoryRegion(null)}
+        resources={resources}
+        units={units}
+      />
     </div>
   );
 }
 
+function RegionHistoryDialog({
+  region, onOpenChange, resources, units,
+}: {
+  region: { id: string; name: string } | null;
+  onOpenChange: (o: boolean) => void;
+  resources: any[];
+  units: any[];
+}) {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const regionResourceIds = useMemo(() => {
+    if (!region) return [];
+    const unitIds = new Set(units.filter((u) => u.region_id === region.id).map((u) => u.id));
+    return resources.filter((r) => unitIds.has(r.unit_id)).map((r) => r.id);
+  }, [region, units, resources]);
+
+  useEffect(() => {
+    if (!region || regionResourceIds.length === 0) { setLogs([]); return; }
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      const { data } = await supabase
+        .from("resource_status_log")
+        .select("*")
+        .in("resource_id", regionResourceIds)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (!cancelled) {
+        setLogs(data ?? []);
+        setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [region, regionResourceIds]);
+
+  const resourceMap = useMemo(() => {
+    const m = new Map<string, any>();
+    resources.forEach((r) => {
+      const u = units.find((x) => x.id === r.unit_id);
+      m.set(r.id, { ...r, unit: u });
+    });
+    return m;
+  }, [resources, units]);
+
+  return (
+    <Dialog open={!!region} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><History className="h-5 w-5" />Історія ПТО — {region?.name}</DialogTitle>
+          <DialogDescription>Усі направлення на технічне обслуговування та повернення.</DialogDescription>
+        </DialogHeader>
+        {loading ? (
+          <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+        ) : logs.length === 0 ? (
+          <div className="text-center text-muted-foreground py-8 text-sm">Записів ще немає.</div>
+        ) : (
+          <div className="space-y-2">
+            {logs.map((log) => {
+              const r = resourceMap.get(log.resource_id);
+              const isPTO = log.action === "send_to_pto";
+              return (
+                <div key={log.id} className="border rounded-md p-3 flex items-start gap-3">
+                  <div className={`mt-0.5 rounded-full p-1.5 ${isPTO ? "bg-blue-500/10 text-blue-500" : "bg-green-500/10 text-green-500"}`}>
+                    {isPTO ? <Wrench className="h-3.5 w-3.5" /> : <Truck className="h-3.5 w-3.5" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">
+                      {isPTO ? "Направлено на ПТО" : "Повернено зі служби ПТО"}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {r ? `${r.type} · ${r.unit?.name ?? "—"} · ${r.unit?.city ?? ""}` : "Ресурс видалено"}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {new Date(log.created_at).toLocaleString("uk-UA")}
+                      {log.from_status && log.to_status && (
+                        <span className="ml-2">· {log.from_status} → {log.to_status}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
